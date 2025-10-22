@@ -110,7 +110,7 @@ class OrthopeEstimator():
 			case 'n_pixels_l2':
 				ope = np.linalg.norm(x)
 			case 'pred_err_l1':
-				ope = e.sum()
+				# ope = e.sum()
 				ope = abs(e).sum()
 			case 'pred_err_l2':
 				ope = np.linalg.norm(e)
