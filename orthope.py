@@ -451,9 +451,9 @@ def plot_oPE_EEG_corrs(language, font):
 					# Compute stats per group
 					stats = {c: dict() for c in df['category'].unique()}
 					for c in stats:
-					    sub = (df['category'] == c)
-					    rho,pval = scipy.stats.pearsonr(df[sub][x],df[sub][y])
-					    stats[c]['r'], stats[c]['p'] = rho, pval
+						sub = (df['category'] == c)
+						rho,pval = scipy.stats.pearsonr(df[sub][x],df[sub][y])
+						stats[c]['r'], stats[c]['p'] = rho, pval
 
 					# Scatter plots
 					ll = 'brief' if nix + eix == 0 else False
