@@ -354,6 +354,9 @@ def compute_oPE_RT_correlations(language, font):
 
 def plot_oPE_RT_scatterplots(language, font):
 
+	respath = './results'
+	if not os.path.exists(respath): os.makedirs(respath)
+
 	df_st = compute_oPE_RT_correlations(language, font)
 	estimates = df_st['estimate'].unique()
 	categories = df_st['category'].unique()
@@ -389,11 +392,14 @@ def plot_oPE_RT_scatterplots(language, font):
 
 	plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95,
 						wspace=0.5, hspace=0.5)
-	fig.set_size_inches(3.5 * len(estimates), 3 * len(noises)) 
-	plt.savefig(f'./results/scatterplots_RT_{language}_{font}', dpi=300)
+	fig.set_size_inches(3.5 * len(estimates), 3 * len(noises))
+	plt.savefig(f'{respath}/scatterplots_RT_{language}_{font}', dpi=300)
 
 
 def plot_oPE_RT_rhos(language, font):
+
+	respath = './results'
+	if not os.path.exists(respath): os.makedirs(respath)
 
 	df_st = compute_oPE_RT_correlations(language, font)
 	categories = df_st['category'].unique()
@@ -416,10 +422,13 @@ def plot_oPE_RT_rhos(language, font):
 
 	plt.subplots_adjust(left=0.06,right=0.98,bottom=0.12,top=0.93,wspace=0.17)
 	fig.set_size_inches(1.5 * len(noises) + 16.5, 4) 
-	plt.savefig(f'./results/correlations_RT_{language}_{font}', dpi=300)
+	plt.savefig(f'{respath}/correlations_RT_{language}_{font}', dpi=300)
 
 	
 def plot_oPE_EEG_corrs(language, font):
+
+	respath = './results'
+	if not os.path.exists(respath): os.makedirs(respath)
 
 	colors    = sns.color_palette()
 	estimates = ['n_pixels_l1', 'n_pixels_l2', 'pre_err_l1', 'pred_err_l2', 
@@ -480,6 +489,6 @@ def plot_oPE_EEG_corrs(language, font):
 			plt.subplots_adjust(left=0.05,  right=0.95, bottom=0.05, top=0.95,
 								wspace=0.5, hspace=0.5)
 			fig.set_size_inches(25, 18) 
-			plt.savefig(f'./results/correlations_{dataset}_{corpus}.png',dpi=300)
+			plt.savefig(f'{respath}/correlations_{dataset}_{corpus}.png',dpi=300)
 
 
