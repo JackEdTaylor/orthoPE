@@ -140,7 +140,7 @@ class OrthopeEstimator():
 	
 	def __plot_mu__(self):
 		if not hasattr(self, 'corpus_stats') or 'mu' not in self.corpus_stats:
-			print('mu estimated via __estimate_corpus_stats__')
+			print('mu not yet estimated via __estimate_corpus_stats__')
 		else:
 			mu_2d = self.corpus_stats['mu'].reshape((self.canvas_dims[1], self.canvas_dims[0]))
 
