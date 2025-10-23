@@ -1,26 +1,49 @@
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import os
+import re
 import pandas as pd
 import scipy
 import seaborn as sns
 import string
+from pathlib import Path
+import collections
 from PIL import Image, ImageDraw, ImageFont
 from tqdm import tqdm
 
 #noises = [1E-10, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0]
 noises  = [0.1, 0.2, 0.5, 0.8, 1.0, 1.5, 2.0]
 
+special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸëïöüĳËÏÖÜĲäöüßÄÖÜẞáéíóúñÁÉÍÓÚÑ'  # special characters to include as alphabetic (in addition to string.ascii_letters)
+
 class OrthopeEstimator():
 
-	def __init__(self, language, font, noise):
+	def __init__(self, language, font, noise, n_letters=(1, np.inf), fpmw=(0, np.inf)):
+
+		self.alphabet = string.ascii_letters + special
 
 		self.language = language
 		self.font     = font
 		self.noise    = noise
-		self.datapath = './data_repository'
-		self.savepath = './models'
+
+		# store subset info (two-unit lists/tuples of >= and <= cutoffs)
+		#  - if just one number is given, this will be used as both >= and <= cutoff
+		if isinstance(n_letters, collections.abc.Iterable) and len(n_letters)==2:
+			self.n_letters = n_letters
+		else:
+			self.n_letters = (n_letters, n_letters)
+
+		if isinstance(fpmw, collections.abc.Iterable) and len(fpmw)==2:
+			self.fpmw = fpmw
+		else:
+			self.fpmw = (fpmw, fpmw)
+
+		self.datapath = Path('data_repository')
+		self.corppath = self.datapath / Path('corpora')
+		self.savepath = Path('models')
+		self.fontpath = Path('fonts')
 
 		preffix = f'{language}_{font}_noise-' + f'{noise:.2g}'.replace('.','p')
 		self.opespath = f'{self.savepath}/{preffix}_opes.csv'
@@ -54,21 +77,39 @@ class OrthopeEstimator():
 	
 		# Available corpora:
 		corpora = {
-			'german': {'fn':'ger5','cmap':{'strings': 'word','freq':'freq'}},
-			'english':{'fn':'us5', 'cmap':{'Word':    'word','Freq':'freq'}},
-			'french': {'fn':'fr5', 'cmap':{'X1_graph':'word','Freq':'freq'}},
-			'dutch':  {'fn':'du5', 'cmap':{'Word':    'word','Freq':'freq'}}
+			'german': {'file':'SUBTLEX-DE.tsv'},
+			'english':{'file':'SUBTLEX-US.tsv'},
+			'french': {'file':'SUBTLEX-FR.tsv'},
+			'dutch':  {'file':'SUBTLEX-NL.tsv'}
 		}
 
 		# Reading corpus
-		datafile = f'{self.datapath}/{corpora[self.language]['fn']}_fin.csv'
-		df = pd.read_csv(datafile)
-		df = df.rename(columns=corpora[self.language]['cmap'])
+		datafile = self.corppath / f'{corpora[self.language]['file']}'
+
+		df = pd.read_csv(datafile, sep='\t', encoding='utf-8',
+				   dtype={'word': str, 'raw_freq': int, 'fpmw': float})
+		
+		# remove any missing values
+		is_missing_words = df.word.isna()
+		df = df.loc[~is_missing_words, ]
+		if any(is_missing_words):
+			print(f'Excluded {is_missing_words.sum()} missing words')
+
+		# remove any non-alphabetic words
+		nonalph_regex = f'[^{"|".join(self.alphabet)}]'
+		is_nonalph = np.array([bool(re.search(nonalph_regex, w)) for w in df.word])
+		df = df.loc[~is_nonalph, ]
+		if any(is_nonalph):
+			print(f'Excluded {is_nonalph.sum()} non-alphabetic words')
+		
+		# apply filters
+		df = df.loc[[len(w)>=self.n_letters[0] and len(w)<=self.n_letters[1] for w in df.word]]
+		df = df.loc[(df.fpmw>=self.fpmw[0]) & (df.fpmw<=self.fpmw[1])]
 
 		# Computing corpus at pixel space assuming identical obs_noise
 		dd = np.array([self.__render_text__(word) for word in df['word']])
 
-		return dd, df['freq']
+		return dd, df['fpmw']
 
 	def __estimate_corpus_stats__(self, weight_by_freq=True):
 		
@@ -96,6 +137,21 @@ class OrthopeEstimator():
 							 'kal':   kal}
 
 		return None
+	
+	def __plot_mu__(self):
+		if not hasattr(self, 'corpus_stats') or 'mu' not in self.corpus_stats:
+			print('mu estimated via __estimate_corpus_stats__')
+		else:
+			mu_2d = self.corpus_stats['mu'].reshape((self.canvas_dims[1], self.canvas_dims[0]))
+
+			fig, ax = plt.subplots()
+			im = ax.imshow(mu_2d, interpolation='none', cmap='Greys')
+			divider = make_axes_locatable(ax)
+			cax = divider.append_axes('right', size='2.5%', pad=0.1)
+			fig.colorbar(im, cax=cax, orientation='vertical')
+
+			return fig, ax
+		
 
 	def __estimate_ope__(self, word, estimate):
 
@@ -127,18 +183,18 @@ class OrthopeEstimator():
 
 		# Settings
 		font_size   = 34
-		canvas_dims = (100, 36)
-		font_dict   = {'courier'  : './fonts/couriernew.ttf',
-					   'courieri' : './fonts/couriernewi.ttf',
-					   'cambria'  : './fonts/cambria.ttf',
-					   'verdana'  : './fonts/verdana.ttf',
-					   'cambriai' : './fonts/cambriai.ttf'}
+		self.canvas_dims = (int(round(22*self.n_letters[1])), 36)
+		font_dict   = {'courier'  : self.fontpath / 'couriernew.ttf',
+					   'courieri' : self.fontpath / 'couriernewi.ttf',
+					   'cambria'  : self.fontpath / 'cambria.ttf',
+					   'verdana'  : self.fontpath / 'verdana.ttf',
+					   'cambriai' : self.fontpath / 'cambriai.ttf'}
 
 		# Rendering text with pillow
-		render   = Image.new('L', canvas_dims, color=0)
+		render   = Image.new('L', self.canvas_dims, color=0)
 		draw     = ImageDraw.Draw(render)
 		font     = ImageFont.truetype(font_dict[self.font], font_size)
-		text_pos = ((canvas_dims[0] - font.getlength(text))/2, -7)
+		text_pos = ((self.canvas_dims[0] - font.getlength(text))/2, -7)
 		draw.text(text_pos, text, fill=255, font=font)
 		if show: render.show();
 
@@ -304,7 +360,6 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 	def __render_text__(self, text, show=False):
 
 		# Settings
-		special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸëïöüĳËÏÖÜĲäöüßÄÖÜẞáéíóúñÁÉÍÓÚÑ'
 		alphabet = string.ascii_letters + special + ' '
 
 		render_array = np.zeros((self.max_n_letters, len(alphabet)))
