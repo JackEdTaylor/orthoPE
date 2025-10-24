@@ -440,7 +440,9 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 		# Settings
 		alphabet = string.ascii_letters + special + ' '
 
-		render_array = np.zeros((self.nletters[1], len(alphabet)))
+		max_n_letters = max([len(text)]) if np.isinf(self.nletters[1]) else self.nletters[1]
+
+		render_array = np.zeros((max_n_letters, len(alphabet)))
 		for cix, c in enumerate(text):
 			render_array[cix, alphabet.index(c)] = 1
 		
