@@ -1,18 +1,17 @@
 import orthope
+import datahandlers
 import glob
+import pandas as pd
+import numpy as np
 import time
 
-
-def compute_all_models(language, fonts=None):
+def compute_all_models(language, input_words, fonts=None, n_letters=(5, 5), freq_perc=(0, 100), data_label=None):
 
 	if (fonts is None) or (fonts == 'word'):
 		fonts = ['word']
 
 	for font in fonts:
-		orthope.run_all_oPEs(language, font)
-		orthope.plot_oPE_RT_scatterplots(language, font)
-		orthope.plot_oPE_RT_rhos(language, font)
-
+		orthope.run_all_oPEs(language=language, font=font, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, data_label=data_label)
 
 
 def integrate_models_in_csv(modeldict, savename):
@@ -43,11 +42,18 @@ def integrate_models_in_csv(modeldict, savename):
 
 
 
+fonts = ['courier', 'courieri', 'cambria', 'verdana', 'cambriai']
 language = 'german'
-fonts = ['courier'] # 'courieri', 'cambria', 'verdana', 'cambriai']
 
-compute_all_models(language, fonts)
-compute_all_models(language, 'word')
+# calculate for all German stimuli presented in Gagl et al.
+dh = datahandlers.Gagl2020DataHandler(language=language)
+unique_words = dh.get_unique_words()
+nletters_lims = dh.get_nletter_lims()
+
+unique_words = unique_words[:10]
+
+compute_all_models(language, input_words=unique_words, fonts='word', n_letters=nletters_lims, data_label='gagl2020')
+compute_all_models(language, input_words=unique_words, fonts=fonts, n_letters=nletters_lims, data_label='gagl2020')
 
 
 modeldict = {'pred_err_l2':      'PE2', 

@@ -20,9 +20,9 @@ special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸ
 
 class OrthopeEstimator():
 
-	def __init__(self, language, font, noise, input_words, n_letters=(1, np.inf), fpmw=(0, np.inf)):
+	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), data_label=None):
 
-		self.alphabet = string.ascii_letters + special
+		self.alphabet = string.ascii_letters + special + ' '
 
 		self.language    = language
 		self.font        = font
@@ -36,18 +36,18 @@ class OrthopeEstimator():
 		else:
 			self.n_letters = (n_letters, n_letters)
 
-		if isinstance(fpmw, collections.abc.Iterable) and len(fpmw)==2:
-			self.fpmw = fpmw
+		if isinstance(freq_perc, collections.abc.Iterable) and len(freq_perc)==2:
+			self.freq_perc = freq_perc
 		else:
-			self.fpmw = (fpmw, fpmw)
+			self.freq_perc = (freq_perc, freq_perc)
 
 		self.datapath = Path('data_repository')
 		self.corppath = self.datapath / Path('corpora')
-		self.savepath = Path('models')
 		self.fontpath = Path('fonts')
+		self.savepath = Path('models')
 
-		preffix = f'{language}_{font}_noise-' + f'{noise:.2g}'.replace('.','p')
-		self.opespath = f'{self.savepath}/{preffix}_opes.csv'
+		data_label = '' if data_label is None else f'{data_label}_'
+		self.opespath = self.savepath / f'{data_label}{language}_{font}_noise-{noise}_opes.csv'
 
 		if not os.path.exists(self.savepath): os.makedirs(self.savepath)
 		if not os.path.exists(self.datapath): os.makedirs(self.datapath)
@@ -105,7 +105,10 @@ class OrthopeEstimator():
 		
 		# apply filters
 		df = df.loc[[len(w)>=self.n_letters[0] and len(w)<=self.n_letters[1] for w in df.word]]
-		df = df.loc[(df.fpmw>=self.fpmw[0]) & (df.fpmw<=self.fpmw[1])]
+
+		# apply percentile filter on frequency
+		fpmw_filter = [np.percentile(df.fpmw, self.freq_perc[0]), np.percentile(df.fpmw, self.freq_perc[1])]
+		df = df.loc[(df.fpmw>=fpmw_filter[0]) & (df.fpmw<=fpmw_filter[1])]
 
 		# Computing corpus at pixel space assuming identical obs_noise
 		dd = np.array([self.__render_text__(word) for word in df['word']])
@@ -254,17 +257,14 @@ class OrthopeEstimator():
 			case 'pred_err_l2':
 				ope = np.linalg.norm(e)
 			case 'pw_pred_err':
-				if np.isnan():
-					ope = np.nan
-				else:
-					ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
+				ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
 			case 'mahalanobis':
-				if np.isnan(self.corpus_stats['pi']):
+				if np.size(self.corpus_stats['pi'])==1 and np.isnan(self.corpus_stats['pi']):
 					ope = np.nan
 				else:
 					ope = (e @ self.corpus_stats['pi'] @ e.T)**.5
 			case 'kalmanw_pred_err':
-				if np.isnan(self.corpus_stats['kal']):
+				if np.size(self.corpus_stats['kal'])==1 and np.isnan(self.corpus_stats['kal']):
 					ope = np.nan
 				else:
 					ope = np.linalg.norm(self.corpus_stats['kal'] @ e)
@@ -314,15 +314,15 @@ class OrthopeEstimator():
 
 class LetterOrthopeEstimator(OrthopeEstimator):
 	
-	def __init__(self, language, noise, input_words, n_letters=(1, np.inf), fpmw=(0, np.inf)):
-		super().__init__(language, font='word', noise=noise, input_words=input_words, n_letters=n_letters, fpmw=fpmw)
+	def __init__(self, language, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), data_label=None):
+		super().__init__(language, font='word', noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, data_label=data_label)
 
 	def __render_text__(self, text, show=False):
 
 		# Settings
 		alphabet = string.ascii_letters + special + ' '
 
-		max_n_letters = max([len(text)]) if np.isinf(self.nletters[1]) else self.nletters[1]
+		max_n_letters = max([len(text)]) if np.isinf(self.n_letters[1]) else self.n_letters[1]
 
 		render_array = np.zeros((max_n_letters, len(alphabet)))
 		for cix, c in enumerate(text):
@@ -340,178 +340,11 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 
 
-def run_all_oPEs(language, font, noise, input_words, n_letters=(1, np.inf), fpmw=(0, np.inf)):
+def run_all_oPEs(language, font, input_words, n_letters=(5, 5), freq_perc=(0, 100), data_label=None):
 
 	for noise in noises:
 		if font == 'word':
-			gg = LetterOrthopeEstimator(language=language, noise=noise, input_words=input_words, n_letters=n_letters, fpmw=fpmw)
+			gg = LetterOrthopeEstimator(language=language, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, data_label=data_label)
 		else:
-			gg = OrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, fpmw=fpmw)
+			gg = OrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, data_label=data_label)
 		gg.load_opes()
-
-
-def compute_oPE_RT_correlations(language, font):
-
-	estimates = ['n_pixels_l1', 'n_pixels_l2', 'pred_err_l1', 'pred_err_l2', 
-				 'pw_pred_err', 'mahalanobis', 'kalmanw_pred_err']
-	
-	stats = []
-	for nix, noise in enumerate(noises):
-
-		gg = OrthopeEstimator(language, font, noise)
-		df = pd.merge(gg.load_opes(), gg.load_data_rt(), on='word')
-
-		for eix, est in enumerate(estimates):
-			for c in df['category'].unique():
-				sub  = (df['category'] == c)
-				x, y = 'rtz_mu', est+'_mu'
-				rho, pval = scipy.stats.pearsonr(df[sub][x],df[sub][y])
-
-				stats.append({'estimate': est, 'noise': noise, 'category': c,
-							  'pval': pval, 'rho': rho})
-
-	df_st = pd.DataFrame(stats)
-
-	return df_st
-
-
-def plot_oPE_RT_scatterplots(language, font):
-
-	respath = './results'
-	if not os.path.exists(respath): os.makedirs(respath)
-
-	df_st = compute_oPE_RT_correlations(language, font)
-	estimates = df_st['estimate'].unique()
-	categories = df_st['category'].unique()
-
-	fig, axes = plt.subplots(len(noises), len(estimates))
-	colors    = sns.color_palette()
-	sns.set(style="whitegrid")
-
-	for nix, noise in enumerate(noises):
-		gg = OrthopeEstimator(language, font, noise)
-		df = pd.merge(gg.load_opes(), gg.load_data_rt(), on='word')
-
-		for eix, est in enumerate(estimates):
-			
-			subset = (df_st['estimate']==est) & (df_st['noise']==noise)
-			x, y   = 'rtz_mu', est+'_mu'
-			ax     = axes[nix, eix]
-			legend = 'brief' if nix + eix == 0 else False
-			
-			sns.scatterplot(df,x=x,y=y,hue='category',ax=ax,legend=legend)
-
-			# Write down stat texts
-			for n, cat in enumerate(categories):
-				rho  = df_st[subset&(df_st['category']==cat)]['rho'].iloc[0]
-				pval = df_st[subset&(df_st['category']==cat)]['pval'].iloc[0]
-				ax.text(0.95, 0.95-n*0.08, f'r={rho:.2f} (p={pval:.2g})', 
-						color=colors[n], transform=ax.transAxes, 
-						ha='right', va='top')
-
-			ax.set_title(f'{est}')
-			ax.set_xlabel("RT (z-score)")
-			if eix == 0: ax.set_ylabel(f'noise = {noise:.1f}')
-
-	plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95,
-						wspace=0.5, hspace=0.5)
-	fig.set_size_inches(3.5 * len(estimates), 3 * len(noises))
-	plt.savefig(f'{respath}/scatterplots_RT_{language}_{font}', dpi=300)
-
-
-def plot_oPE_RT_rhos(language, font):
-
-	respath = './results'
-	if not os.path.exists(respath): os.makedirs(respath)
-
-	df_st = compute_oPE_RT_correlations(language, font)
-	categories = df_st['category'].unique()
-	
-	fig, axes  = plt.subplots(1, len(categories))
-	sns.set(style="white")
-	
-	alphas = [.0001, .001, 0.01, .05] 
-
-	for cat, ax in zip(categories, axes):
-		sub  = (df_st['category'] == cat)
-		rho  = df_st[sub].pivot(index='estimate',columns='noise',values='rho')
-		pval = df_st[sub].pivot(index='estimate',columns='noise',values='pval')
-		sign = pval.map(lambda x: '*' * sum([x < alpha for alpha in alphas]))
-		annot = rho.map(lambda x: f'{x:.2f}') + sign
-		sns.heatmap(rho,vmin=-.25,vmax=.25,annot=annot,fmt="",cmap='vlag',ax=ax)
-		#sns.heatmap(rho,vmin=-.5,vmax=.5,annot=rho,cmap='vlag',ax=ax)
-		ax.set_title(cat)
-		ax.set_ylabel('')
-
-	plt.subplots_adjust(left=0.06,right=0.98,bottom=0.12,top=0.93,wspace=0.17)
-	fig.set_size_inches(1.5 * len(noises) + 16.5, 4) 
-	plt.savefig(f'{respath}/correlations_RT_{language}_{font}', dpi=300)
-
-	
-def plot_oPE_EEG_corrs(language, font):
-
-	respath = './results'
-	if not os.path.exists(respath): os.makedirs(respath)
-
-	colors    = sns.color_palette()
-	estimates = ['n_pixels_l1', 'n_pixels_l2', 'pre_err_l1', 'pred_err_l2', 
-				 'pw_pred_err', 'mahalanobis', 'kalmanw_pred_err']
-
-	df_eeg = OrthopeEstimator(language, font, noises[0]).load_data_eeg()
-
-	timewinds = list(set([int(col[4:7]) for col in df_eeg.columns]))
-	clusters  = list(set([col[8] for col in df_eeg.columns]))
-
-	for timewind in timewinds:
-		for cluster in clusters:
-
-			fig, axes = plt.subplots(len(noises), len(estimates))
-			sns.set(style="whitegrid")
-
-			dataset = f'EEG-{timewind}-{cluster}'
-			corpus  = f'{language}_{font}'
-
-			for nix, noise in enumerate(noises):
-				gg = OrthopeEstimator(language, font, noise)
-				df = pd.merge(gg.load_opes(), gg.load_data_rt(), on='word')
-
-				for eix, est in enumerate(estimates):
-
-					x, y = 'rtz_mu', est+'_mu'
-					ax = axes[nix, eix]
-
-					# Compute stats per group
-					stats = {c: dict() for c in df['category'].unique()}
-					for c in stats:
-						sub = (df['category'] == c)
-						rho,pval = scipy.stats.pearsonr(df[sub][x],df[sub][y])
-						stats[c]['r'], stats[c]['p'] = rho, pval
-
-					# Scatter plots
-					ll = 'brief' if nix + eix == 0 else False
-					sns.scatterplot(df,x=x,y=y,hue='category',ax=ax,legend=ll)
-
-					# Write down stats
-					for n, c in enumerate(df['category'].unique()):
-						x, y = 0.05, 0.95 - n * 0.08
-						text = f"r={stats[c]['r']:.2f} (p={stats[c]['p']:.2g})"
-						ref  = ax.transAxes
-						ax.text(x, y, text,
-								transform=ref,
-								color=colors[n],
-								ha='left',va='top')
-
-					# Polishing plots
-					r2_str=f'(R²={stats[c]['r']**2:.2f},{stats[c]['r']**2:.2f})'
-					ax.set_title(f'{est} {r2_str}')
-					ax.set_xlabel("RT (as z-score)")
-					
-					if eix == 0:
-						ax.set_ylabel(f'noise = {noise:.1f}')
-
-			plt.subplots_adjust(left=0.05,  right=0.95, bottom=0.05, top=0.95,
-								wspace=0.5, hspace=0.5)
-			fig.set_size_inches(25, 18) 
-			plt.savefig(f'{respath}/correlations_{dataset}_{corpus}.png',dpi=300)
-
-

@@ -1,15 +1,16 @@
 import os
 import pandas as pd
+import numpy as np
 from pathlib import Path
 
-class DataLoader():
+class Gagl2020DataHandler():
 	
     def __init__(self, language):
         self.datapath = Path('data_repository')
         self.language = language
         if not os.path.exists(self.datapath): os.makedirs(self.datapath)
 
-    def read_rt_data_from_csv(self):
+    def load_beh_words(self):
 
         data_dict = {
             'german': {
@@ -38,56 +39,19 @@ class DataLoader():
                     'mot':    'word',
                     'nonmot': 'pseudoword'}}
             }
+        
+        if self.language not in data_dict: return np.array([])
 
         data = data_dict[self.language]
         keys = ['subject','word','category']
 
-        df = pd.read_csv(f'{self.datapath}/{data['file']}')
+        df = pd.read_csv(f'{self.datapath}/{data['file']}', encoding='utf-8')
         df = df.rename(columns={data[key]: key for key in keys})
-        df['category'] = df['category'].map(data['catmap'])
+        # df['category'] = df['category'].map(data['catmap'])
         
-        return df
+        self.beh_words = np.unique(df.word.to_numpy(str))
 
-    def load_data_rt(self):
-
-        df = self.read_rt_data_from_csv()
-
-        # Z-score RTs within each participant
-        z_scoring = lambda x: (x - x.mean()) / x.std()
-        df['rt_z'] = df.groupby('subject')['rt'].transform(z_scoring)
-        df['log_rt'] = df['rt'].transform(np.log)
-
-        # Compute mean RT per word across participants
-        rt_mu   = df.groupby('word')['rt'].mean().reset_index()
-        rt_std  = df.groupby('word')['rt'].std().reset_index()
-        rtz_mu  = df.groupby('word')['rt_z'].mean().reset_index()
-        rtz_std = df.groupby('word')['rt_z'].std().reset_index()
-        log_rt  = df.groupby('word')['log_rt'].mean().reset_index()
-        
-        # Rename columns
-        rt_mu.rename(columns={'rt': 'rt_mu'}, inplace=True)
-        rt_std.rename(columns={'rt': 'rt_std'}, inplace=True)
-        rtz_mu.rename(columns={'rt_z': 'rtz_mu'}, inplace=True)
-        rtz_std.rename(columns={'rt_z': 'rtz_std'}, inplace=True)
-        
-        # Merge estimations and add word categories
-        word_categories = df[['word', 'category']].drop_duplicates()
-        opes     = df[['word', 'ope']].drop_duplicates()
-        opes_all = df[['word', 'ope_all']].drop_duplicates()
-        rt_df = pd.merge(rt_mu, rt_std,  on='word')
-        rt_df = pd.merge(rt_df, rtz_mu,  on='word')
-        rt_df = pd.merge(rt_df, rtz_std, on='word')
-        rt_df = pd.merge(rt_df, log_rt,  on='word')
-        rt_df = pd.merge(rt_df, word_categories, on='word')
-        rt_df = pd.merge(rt_df, opes,     on='word')
-        rt_df = pd.merge(rt_df, opes_all, on='word')
-
-        # Set 'word' as index
-        rt_df.set_index('word', inplace=True)
-
-        return rt_df
-
-    def load_data_eeg(self):
+    def load_eeg_words(self):
 
         data_dict = {'german': {
                         'subject' : 'subject',
@@ -99,43 +63,40 @@ class DataLoader():
                             'Consonant strings': 'consonants'}
                         }
                     }
+        
+        if self.language not in data_dict: return np.array([])
 
         data = data_dict[self.language]		
         keys = ['subject','word','category']
 
-        datapath = './data_repository'
         twindows = [230, 340, 430]
 
-        tmp_df = pd.read_csv(f'{self.datapath}/EEG_{twindows[0]}.csv')
-        eeg_df = pd.DataFrame({'word': tmp_df[data['word']].unique()})
+        twords = []
 
         for twindow in twindows:
 
-            df = pd.read_csv(f'{datapath}/EEG_{twindow}.csv')
+            df = pd.read_csv(self.datapath / f'EEG_{twindow}.csv', encoding='utf-8')
             df = df.rename(columns={data[key]: key for key in keys})
+            twords.append(np.unique(df.word.to_numpy(str)))
 
-            # Z-score voltages within each participant
-            z_scoring = lambda x: (x - x.mean()) / x.std()
-            df['mv_z'] = df.groupby('subject')['mv'].transform(z_scoring)
+        self.eeg_words = np.unique(np.concat(twords))
 
-            # Average across participants
+    def get_unique_words(self):
+        if not hasattr(self, 'beh_words'):
+            self.load_beh_words()
+        if not hasattr(self, 'eeg_words'):
+            self.load_eeg_words()
+        
+        self.unique_words = np.sort(np.unique( np.concat([self.beh_words, self.eeg_words]) ))
 
-            for cluster in ['P', 'C']:
-                subset = (df.cluster==cluster)
-                for stat in ['mu', 'std']:
+        return self.unique_words
 
-                    field = f'mvz_{twindow}_{cluster}_{stat}'
+    def get_nletter_lims(self):
+        if not hasattr(self, 'unique_words'):
+            self.get_unique_words()
 
-                    if stat == 'mu':
-                        df_tmp = df[subset].groupby('word')['mv_z'].mean()
-                    if stat == 'std':
-                        df_tmp = df[subset].groupby('word')['mv_z'].std()
-                    
-                    df_tmp = df_tmp.reset_index()
-                    df_tmp.rename(columns={'mv_z': field}, inplace=True)
-                    eeg_df = pd.merge(eeg_df, df_tmp)
+        str_lens = np.strings.str_len(self.unique_words)
 
-        eeg_df.set_index('word', inplace=True)
-
-        return eeg_df
+        return (str_lens.min(), str_lens.max())
+        
     
