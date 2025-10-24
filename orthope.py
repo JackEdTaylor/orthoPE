@@ -111,7 +111,7 @@ class OrthopeEstimator():
 
 		return dd, df['fpmw']
 
-	def __estimate_corpus_stats__(self, weight_by_freq=True):
+	def estimate_corpus_stats(self, weight_by_freq=True):
 		
 		print('Rendering corpus...')
 		dd, weights = self.__render_corpora__()
@@ -152,30 +152,33 @@ class OrthopeEstimator():
 
 		return None
 	
+	def __plot_2d_from_flat__(self, x_1d, cmap='Greys', **kwargs):
+		x_2d = x_1d.reshape((self.canvas_dims[1], self.canvas_dims[0]))
+		fig, ax = plt.subplots()
+		im = ax.imshow(x_2d, interpolation='none', cmap=cmap, **kwargs)
+		divider = make_axes_locatable(ax)
+		cax = divider.append_axes('right', size='2.5%', pad=0.1)
+		fig.colorbar(im, cax=cax, orientation='vertical')
+		return fig, ax
+	
 	def __plot_2dstat__(self, stat, log_trans=False, cmap='Greys'):
 		if not hasattr(self, 'corpus_stats') or stat not in self.corpus_stats:
-			print(f'{stat} not (yet) estimated via __estimate_corpus_stats__')
+			print(f'{stat} not (yet) estimated via estimate_corpus_stats')
 		else:
-			stat_2d = self.corpus_stats[stat].reshape((self.canvas_dims[1], self.canvas_dims[0]))
-
 			if log_trans:
 				stat_2d = np.log(stat_2d)
 				stat_lab = f'Log {stat}'
 			else:
 				stat_lab = stat
 
-			fig, ax = plt.subplots()
+			fig, ax = self.__plot_2d_from_flat__(self.corpus_stats[stat], cmap=cmap)
 			ax.set_title(stat_lab)
-			im = ax.imshow(stat_2d, interpolation='none', cmap=cmap)
-			divider = make_axes_locatable(ax)
-			cax = divider.append_axes('right', size='2.5%', pad=0.1)
-			fig.colorbar(im, cax=cax, orientation='vertical')
 
 			return fig, ax
 		
 	def __plot_4dstat__(self, stat, log_trans=False):
 		if not hasattr(self, 'corpus_stats') or stat not in self.corpus_stats:
-			print(f'{stat} not (yet) estimated via __estimate_corpus_stats__')
+			print(f'{stat} not (yet) estimated via estimate_corpus_stats')
 		else:
 			stat_4d = self.corpus_stats[stat].reshape((self.canvas_dims[1], self.canvas_dims[0], self.canvas_dims[1], self.canvas_dims[0]))
 
@@ -241,7 +244,7 @@ class OrthopeEstimator():
 
 		match estimate:
 			case 'n_pixels_l1':
-				ope = abs(x).sum()	
+				ope = x.sum()
 			case 'n_pixels_l2':
 				ope = np.linalg.norm(x)
 			case 'pred_err_l1':
@@ -250,11 +253,20 @@ class OrthopeEstimator():
 			case 'pred_err_l2':
 				ope = np.linalg.norm(e)
 			case 'pw_pred_err':
-				ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
+				if np.isnan():
+					ope = np.nan
+				else:
+					ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
 			case 'mahalanobis':
-				ope = (e @ self.corpus_stats['pi'] @ e.T)**.5
+				if np.isnan(self.corpus_stats['pi']):
+					ope = np.nan
+				else:
+					ope = (e @ self.corpus_stats['pi'] @ e.T)**.5
 			case 'kalmanw_pred_err':
-				ope = np.linalg.norm(self.corpus_stats['kal'] @ e)
+				if np.isnan(self.corpus_stats['kal']):
+					ope = np.nan
+				else:
+					ope = np.linalg.norm(self.corpus_stats['kal'] @ e)
 
 		return ope
 
@@ -423,7 +435,7 @@ class OrthopeEstimator():
 			opes_df.set_index('word', inplace=True)
 		else:
 			print('OPEs file not found. Computing...')
-			self.__estimate_corpus_stats__()
+			self.estimate_corpus_stats()
 			rt_df   = self.load_data_rt()
 			opes_df = self.__create_opes_df__(words=list(rt_df.index))
 
