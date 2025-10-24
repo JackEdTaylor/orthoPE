@@ -152,20 +152,85 @@ class OrthopeEstimator():
 
 		return None
 	
-	def __plot_mu__(self):
-		if not hasattr(self, 'corpus_stats') or 'mu' not in self.corpus_stats:
-			print('mu not yet estimated via __estimate_corpus_stats__')
+	def __plot_2dstat__(self, stat, log_trans=False, cmap='Greys'):
+		if not hasattr(self, 'corpus_stats') or stat not in self.corpus_stats:
+			print(f'{stat} not (yet) estimated via __estimate_corpus_stats__')
 		else:
-			mu_2d = self.corpus_stats['mu'].reshape((self.canvas_dims[1], self.canvas_dims[0]))
+			stat_2d = self.corpus_stats[stat].reshape((self.canvas_dims[1], self.canvas_dims[0]))
+
+			if log_trans:
+				stat_2d = np.log(stat_2d)
+				stat_lab = f'Log {stat}'
+			else:
+				stat_lab = stat
 
 			fig, ax = plt.subplots()
-			im = ax.imshow(mu_2d, interpolation='none', cmap='Greys')
+			ax.set_title(stat_lab)
+			im = ax.imshow(stat_2d, interpolation='none', cmap=cmap)
 			divider = make_axes_locatable(ax)
 			cax = divider.append_axes('right', size='2.5%', pad=0.1)
 			fig.colorbar(im, cax=cax, orientation='vertical')
 
 			return fig, ax
 		
+	def __plot_4dstat__(self, stat, log_trans=False):
+		if not hasattr(self, 'corpus_stats') or stat not in self.corpus_stats:
+			print(f'{stat} not (yet) estimated via __estimate_corpus_stats__')
+		else:
+			stat_4d = self.corpus_stats[stat].reshape((self.canvas_dims[1], self.canvas_dims[0], self.canvas_dims[1], self.canvas_dims[0]))
+
+			stat_lab = f'log {stat}' if log_trans else stat
+
+			fig, axs = plt.subplots(ncols=2, nrows=2)
+			gs = axs[0, 0].get_gridspec()
+
+			for ax in axs[:2, 0]:
+				ax.remove()
+
+			axbig = fig.add_subplot(gs[:2, 0])
+			axbig.set_title(f'Full {stat_lab} Matrix')
+			if log_trans:
+				im1 = axbig.imshow(np.log(self.corpus_stats[stat]), interpolation='none')
+			else:
+				im1 = axbig.imshow(self.corpus_stats[stat], interpolation='none')
+			divider1 = make_axes_locatable(axbig)
+			cax1 = divider1.append_axes('right', size='2.5%', pad=0.1)
+			fig.colorbar(im1, cax=cax1, orientation='vertical')
+
+			axs[0, 1].set_title(f'Mean of {stat_lab} (Pixel Space)')
+			if log_trans:
+				im2 = axs[0, 1].imshow(np.mean(np.ma.masked_invalid(np.log(stat_4d)), axis=(2, 3)), interpolation='none')
+			else:
+				im2 = axs[0, 1].imshow(stat_4d.mean(axis=(2, 3)), interpolation='none')
+			divider2 = make_axes_locatable(axs[0, 1])
+			cax2 = divider2.append_axes('right', size='2.5%', pad=0.1)
+			fig.colorbar(im2, cax=cax2, orientation='vertical')
+
+			axs[1, 1].set_title(f'SD of {stat_lab} (Pixel Space)')
+			if log_trans:
+				im3 = axs[1, 1].imshow(np.nanstd(np.ma.masked_invalid(np.log(stat_4d)), axis=(2, 3)), interpolation='none')
+			else:
+				im3 = axs[1, 1].imshow(stat_4d.std(axis=(2, 3)), interpolation='none')
+			divider3 = make_axes_locatable(axs[1, 1])
+			cax3 = divider3.append_axes('right', size='2.5%', pad=0.1)
+			fig.colorbar(im3, cax=cax3, orientation='vertical')
+
+			fig.tight_layout()
+
+			return fig, ax
+		
+	def plot_stat(self, stat):
+		match stat:
+			case 'mu':
+				self.__plot_2dstat__(stat, log_trans=False, cmap='Greys')
+			case 'sigma':
+				self.__plot_4dstat__(stat)
+			case 'pi':
+				self.__plot_4dstat__(stat, log_trans=True)
+			case 'pi_id':
+				self.__plot_2dstat__(stat, log_trans=True, cmap='viridis')
+			case 'kal':
+				self.__plot_4dstat__(stat)
 
 	def __estimate_ope__(self, word, estimate):
 
