@@ -113,22 +113,36 @@ class OrthopeEstimator():
 
 	def __estimate_corpus_stats__(self, weight_by_freq=True):
 		
+		print('Rendering corpus...')
 		dd, weights = self.__render_corpora__()
 
 		if not weight_by_freq:
 			weights = np.ones(weights.shape)
 
 		# Estimating stats
+		print('Estimating mu and sigma...')
 		mu    = np.average(dd, axis=0, weights=weights)
 		sigma = np.cov(dd, rowvar=False, aweights=weights)
 		
 		# Precission matrix: exact and assuming independent distributions
-		pi    = scipy.linalg.pinvh(sigma)
+		print('Estimating precision matrices...')
+		try:
+			pi = scipy.linalg.pinvh(sigma)
+		except np.linalg.LinAlgError as e:
+			print(f'LinAlgError: {e}')
+			pi = np.nan
+
 		pi_id = 1 / (np.diag(sigma))
 
 		# Kalman gain assuming same obs_noise in past and current experiences
+		print('Estimating Kalman gain...')
 		obs_sigma = self.noise * np.identity(sigma.shape[0])
-		kal       = sigma @ np.linalg.pinv(sigma + obs_sigma)
+
+		try:
+			kal = sigma @ np.linalg.pinv(sigma + obs_sigma)
+		except np.linalg.LinAlgError as e:
+			print(f'LinAlgError: {e}')
+			kal = np.nan
 
 		self.corpus_stats = {'mu':    mu, 
 							 'sigma': sigma,
