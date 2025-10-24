@@ -432,16 +432,15 @@ class OrthopeEstimator():
 
 class LetterOrthopeEstimator(OrthopeEstimator):
 	
-	def __init__(self, language, noise, max_n_letters=5):
-		super().__init__(language, font='word', noise=noise)
-		self.max_n_letters = max_n_letters
+	def __init__(self, language, noise, n_letters=(1, np.inf), fpmw=(0, np.inf)):
+		super().__init__(language, font='word', noise=noise, n_letters=n_letters, fpmw=fpmw)
 
 	def __render_text__(self, text, show=False):
 
 		# Settings
 		alphabet = string.ascii_letters + special + ' '
 
-		render_array = np.zeros((self.max_n_letters, len(alphabet)))
+		render_array = np.zeros((self.nletters[1], len(alphabet)))
 		for cix, c in enumerate(text):
 			render_array[cix, alphabet.index(c)] = 1
 		
