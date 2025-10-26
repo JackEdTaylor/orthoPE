@@ -12,6 +12,7 @@ from pathlib import Path
 import collections
 from PIL import Image, ImageDraw, ImageFont
 from tqdm import tqdm
+import warnings
 
 #noises = [1E-10, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0]
 noises  = [0.1, 0.2, 0.5, 0.8, 1.0, 1.5, 2.0]
@@ -307,15 +308,16 @@ class OrthopeEstimator():
 		if input_words is None:
 			input_words = self.input_words
 
-		print(f'Calculating OPe for {len(input_words)} inputs...')
-
 		if os.path.exists(self.opespath):
+			print('Loading existing oPE file...')
 			opes_df = pd.read_csv(self.opespath)
 			# CSV interprets index info as an unnamed column
 			opes_df.rename(columns={'Unnamed: 0':'word'}, inplace=True)
-			opes_df.set_index('word', inplace=True)
+
+			if len(opes_df.word.unique()) != set(input_words).issubset(opes_df.word.unique()):
+				warnings.warn(f'Loaded oPE file, but mismatch in words!')
 		else:
-			print('OPEs file not found. Computing...')
+			print(f'Calculating oPE for {len(input_words)} inputs...')
 			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
 			opes_df = self.__create_opes_df__(words=input_words)
 
