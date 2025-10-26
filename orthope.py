@@ -22,7 +22,7 @@ special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸ
 class OrthopeEstimator():
 
 	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
-		data_label_lab = '' if data_label_lab is None else f'data_label '
+		data_label_lab = '' if data_label is None else f'data_label '
 		freq_wt_lab = 'freq-weighted' if freq_weight else 'freq-unweighted'
 		print(f'{data_label_lab}{language}, {font}, {noise}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
 
