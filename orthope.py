@@ -15,12 +15,15 @@ from tqdm import tqdm
 
 #noises = [1E-10, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0]
 noises  = [0.1, 0.2, 0.5, 0.8, 1.0, 1.5, 2.0]
+min_freq_percs = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]  # 100%, top 90% frequent, top 80% frequent, etc.
 
 special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸëïöüĳËÏÖÜĲäöüßÄÖÜẞáéíóúñÁÉÍÓÚÑ'  # special characters to include as alphabetic (in addition to string.ascii_letters)
 
 class OrthopeEstimator():
 
 	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
+		freq_wt_lab = 'freq-weighted' if freq_weight else 'freq-unweighted'
+		print(f'{language}, {font}, {noise}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
 
 		self.alphabet = string.ascii_letters + special + ' '
 
@@ -298,7 +301,10 @@ class OrthopeEstimator():
 
 		return text_array
 
-	def load_opes(self):
+	def load_opes(self, input_words=None):
+
+		if input_words is None:
+			input_words = self.input_words
 
 		if os.path.exists(self.opespath):
 			opes_df = pd.read_csv(self.opespath)
@@ -308,7 +314,7 @@ class OrthopeEstimator():
 		else:
 			print('OPEs file not found. Computing...')
 			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
-			opes_df = self.__create_opes_df__(words=self.input_words)
+			opes_df = self.__create_opes_df__(words=input_words)
 
 		return opes_df
 
@@ -336,16 +342,13 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 
 
-
-
-
-
-
-def run_all_oPEs(language, font, input_words, n_letters=(5, 5), freq_perc=(0, 100), data_label=None):
+def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None):
 
 	for noise in noises:
-		if font == 'word':
-			gg = LetterOrthopeEstimator(language=language, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, data_label=data_label)
-		else:
-			gg = OrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, data_label=data_label)
-		gg.load_opes()
+		for freq_min in min_freq_percs:
+			for freq_weight in (True, False):
+				if font == 'word':
+					gg = LetterOrthopeEstimator(language=language, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+				else:
+					gg = OrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+				gg.load_opes()
