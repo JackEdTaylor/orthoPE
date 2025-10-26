@@ -307,6 +307,8 @@ class OrthopeEstimator():
 		if input_words is None:
 			input_words = self.input_words
 
+		print(f'Calculating OPe for {len(input_words)} inputs')
+
 		if os.path.exists(self.opespath):
 			opes_df = pd.read_csv(self.opespath)
 			# CSV interprets index info as an unnamed column
