@@ -20,13 +20,14 @@ special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸ
 
 class OrthopeEstimator():
 
-	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), data_label=None):
+	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
 
 		self.alphabet = string.ascii_letters + special + ' '
 
 		self.language    = language
 		self.font        = font
 		self.noise       = noise
+		self.freq_weight = freq_weight
 		self.input_words = input_words
 
 		# store subset info (two-unit lists/tuples of >= and <= cutoffs)
@@ -47,7 +48,7 @@ class OrthopeEstimator():
 		self.savepath = Path('models')
 
 		data_label = '' if data_label is None else f'{data_label}_'
-		self.opespath = self.savepath / f'{data_label}{language}_{font}_noise-{noise}_opes.csv'
+		self.opespath = self.savepath / f'{data_label}{language}_{font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes.csv'.replace('.','p')
 
 		if not os.path.exists(self.savepath): os.makedirs(self.savepath)
 		if not os.path.exists(self.datapath): os.makedirs(self.datapath)
@@ -306,7 +307,7 @@ class OrthopeEstimator():
 			opes_df.set_index('word', inplace=True)
 		else:
 			print('OPEs file not found. Computing...')
-			self.estimate_corpus_stats()
+			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
 			opes_df = self.__create_opes_df__(words=self.input_words)
 
 		return opes_df
