@@ -27,3 +27,4 @@ unique_words = unique_words[:10]
 compute_all_models(language, input_words=unique_words, fonts='word', n_letters=nletters_lims, data_label='gagl2020')
 compute_all_models(language, input_words=unique_words, fonts=fonts, n_letters=nletters_lims, data_label='gagl2020')
 
+print('done!')
