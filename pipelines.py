@@ -19,12 +19,10 @@ language = 'german'
 
 # calculate for all German stimuli presented in Gagl et al.
 dh = datahandlers.Gagl2020DataHandler(language=language)
-unique_words = dh.get_unique_words()
+input_words = dh.get_unique_words()
 nletters_lims = dh.get_nletter_lims()
 
-unique_words = unique_words[:10]
-
-compute_all_models(language, input_words=unique_words, fonts='word', n_letters=nletters_lims, data_label='gagl2020')
-compute_all_models(language, input_words=unique_words, fonts=fonts, n_letters=nletters_lims, data_label='gagl2020')
+compute_all_models(language, input_words=input_words, fonts='word', n_letters=nletters_lims, data_label='gagl2020')
+compute_all_models(language, input_words=input_words, fonts=fonts, n_letters=nletters_lims, data_label='gagl2020')
 
 print('done!')
