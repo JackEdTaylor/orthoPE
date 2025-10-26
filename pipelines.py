@@ -5,13 +5,13 @@ import pandas as pd
 import numpy as np
 import time
 
-def compute_all_models(language, input_words, fonts=None, n_letters=(5, 5), freq_perc=(0, 100), data_label=None):
+def compute_all_models(language, input_words, fonts=None, n_letters=(5, 5), data_label=None):
 
 	if (fonts is None) or (fonts == 'word'):
 		fonts = ['word']
 
 	for font in fonts:
-		orthope.run_all_oPEs(language=language, font=font, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, data_label=data_label)
+		orthope.run_all_oPEs(language=language, font=font, input_words=input_words, n_letters=n_letters, data_label=data_label)
 
 
 fonts = ['courier', 'courieri', 'cambria', 'verdana', 'cambriai']
