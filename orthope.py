@@ -332,7 +332,7 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 	def __render_text__(self, text, show=False):
 
 		# Settings
-		alphabet = string.ascii_letters + special + ' '
+		alphabet = self.alphabet
 
 		max_n_letters = max([len(text)]) if np.isinf(self.n_letters[1]) else self.n_letters[1]
 
