@@ -1,5 +1,6 @@
 import numpy as np
 import scipy as sp
+import networkx as nx
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import os
@@ -125,8 +126,9 @@ class OrthopeEstimator():
 
 		# Computing corpus at pixel space assuming identical obs_noise
 		dd = np.array([self.__render_text__(word, noise=self.noise) for word in df['word']])
+		weights = df['fpmw'].to_numpy()
 
-		return dd, df['fpmw']
+		return dd, weights
 
 	def estimate_corpus_stats(self, weight_by_freq=True):
 		
@@ -299,11 +301,14 @@ class OrthopeEstimator():
 
 		return ope
 
-	def __render_text__(self, text, noise=0.0, show=False):
+	def __render_text__(self, text, noise=0.0, standardise_length=True, show=False):
 
 		# Settings
 		font_size   = 34
-		canvas_dims = (int(round(22*self.n_letters[1])), 36)
+		if standardise_length:
+			canvas_dims = (int(round(22*len(text))), 36)
+		else:
+			canvas_dims = (int(round(22*self.n_letters[1])), 36)
 
 		if not hasattr(self, 'array_dims'):
 			self.array_dims = (canvas_dims[1], canvas_dims[0])
@@ -442,13 +447,14 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		if not weight_by_freq:
 			weights = np.ones(weights.shape)
 
-		# Estimating stats
-		print('Estimating word-level barycentre...')
-		dd_3d = dd.reshape([-1, self.array_dims[0], self.array_dims[1]])  # reshape to 3d array of word * x * y
-		bc = otfuns.get_w_barycentre(dd_3d, debias=False, weights=weights, reg=0.0005, numItermax=int(1e7))
+		# # Estimating stats
+		# print('Estimating word-level barycentre...')
+		# dd_3d = dd.reshape([-1, self.array_dims[0], self.array_dims[1]])  # reshape to 3d array of word * x * y
+		# bc = otfuns.get_w_barycentre(dd_3d, debias=False, weights=weights, reg=0.0005, numItermax=int(1e7))
 
-		del dd_3d
+		# del dd_3d
 
+		# TO DO: switch to only calculating for each unique letter, and sum the weights for identical letters
 		print('Estimating within-letter barycentres...')
 		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.array_dims)) for dd_i in dd]
 
@@ -464,9 +470,24 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		del dd_spl
 
-		bc_lett_slot = [otfuns.get_w_barycentre(lett_slot_3d_i, debias=False, weights=weights, reg=0.0005, numItermax=int(1e7)) for lett_slot_3d_i in lett_slot_3d]
+		# treat letters as identical if the values correlate very highly
+		lett_slot_vecs = [lett_slot_3d_i.reshape(lett_slot_3d_i.shape[0], -1) for lett_slot_3d_i in lett_slot_3d]
+		cors = [np.corrcoef(lett_slot_vecs_i) for lett_slot_vecs_i in lett_slot_vecs]
+		del lett_slot_vecs
 
-		self.corpus_stats = {'bc': bc, 'bc_lett_slot': bc_lett_slot}
+		# use network of booleans for whether each pair of vectors reaches the threshold to cluster and find unique
+		identical_r = 0.99
+		letts = []
+		letts_weights = []
+		for cors_i, lett_slot_3d_i in zip(cors, lett_slot_3d):
+			G = nx.from_numpy_array((cors_i >= identical_r).astype(int))  # graph of binary similarities
+			components = list(nx.connected_components(G))
+			letts.append( np.array([lett_slot_3d_i[np.array(list(c)).astype(int), :, :].mean(axis=0) for c in components]) )
+			letts_weights.append( np.array([np.sum(weights[np.array(list(c)).astype(int)]) for c in components]) )
+
+		bcs = [otfuns.get_w_barycentre(L, debias=False, weights=w, reg=0.0005, numItermax=int(1e7)) for L, w in zip(letts, letts_weights)]
+
+		self.corpus_stats = {'bcs': bcs}
 
 		return None
 
