@@ -514,22 +514,23 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		del dd_spl
 
 		# treat letters as identical if the values correlate very highly
-		lett_slot_vecs = [lett_slot_3d_i.reshape(lett_slot_3d_i.shape[0], -1) for lett_slot_3d_i in lett_slot_3d]
-		cors = [np.corrcoef(lett_slot_vecs_i) for lett_slot_vecs_i in lett_slot_vecs]
-		del lett_slot_vecs
 
 		# use network of booleans for whether each pair of vectors reaches the threshold to cluster and find unique
 		# (this is much less efficient, but still better than using corpus-based analysis to get unique letters, as it allows for different letter positions)
 		identical_r = 0.99999  # letter images that correlate at least this strongly will be considered identical, and will be averaged - use a very strict cutoff to avoid equating similar but different letters
 		letts = []
 		letts_weights = []
-		for cors_i, lett_slot_3d_i in zip(cors, lett_slot_3d):
+		for lett_slot_3d_i in lett_slot_3d:
+			lett_slot_vecs_i = lett_slot_3d_i.reshape(lett_slot_3d_i.shape[0], -1)
+			cors_i = np.corrcoef(lett_slot_vecs_i)
 			G = nx.from_numpy_array((cors_i >= identical_r).astype(int))  # graph of binary similarities
 			components = list(nx.connected_components(G))
 			letts.append( np.array([lett_slot_3d_i[np.array(list(c)).astype(int), :, :].mean(axis=0) for c in components]) )
 			letts_weights.append( np.array([np.sum(weights[np.array(list(c)).astype(int)]) for c in components]) )
 
 		letts_weights = [w / w.sum() for w in letts_weights]
+
+		del lett_slot_vecs_i, cors_i, G, components
 
 		# crop the images of letters to reduce array size
 		letts_cr_out = [self.__crop_to_content__(L, L.max(axis=0)) for L in letts]
