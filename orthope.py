@@ -461,14 +461,12 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		if not weight_by_freq:
 			weights = np.ones(weights.shape)
 
-		# # Estimating stats
 		# print('Estimating word-level barycentre...')
 		# dd_3d = dd.reshape([-1, self.array_dims[0], self.array_dims[1]])  # reshape to 3d array of word * x * y
 		# bc = otfuns.get_w_barycentre(dd_3d, debias=False, weights=weights, reg=0.0005, numItermax=int(1e7))
 
 		# del dd_3d
 
-		# TO DO: switch to only calculating for each unique letter, and sum the weights for identical letters
 		print('Getting letters and weights for each slot...')
 		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.array_dims)) for dd_i in dd]
 
@@ -490,7 +488,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		del lett_slot_vecs
 
 		# use network of booleans for whether each pair of vectors reaches the threshold to cluster and find unique
-		identical_r = 0.99
+		# (this is much less efficient, but still better than using corpus-based analysis to get unique letters, as it allows for different letter positions)
+		identical_r = 0.99999  # letter images that correlate at least this strongly will be considered identical, and will be averaged - use a very strict cutoff to avoid equating similar but different letters
 		letts = []
 		letts_weights = []
 		for cors_i, lett_slot_3d_i in zip(cors, lett_slot_3d):
@@ -510,7 +509,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		bcs_cr = [otfuns.get_w_barycentre(L, debias=False, weights=w, reg=0.0005, numItermax=int(1e7)) for L, w in zip(letts_cr, letts_weights)]
 
 		# now undo the crop to put the barycentres in the original coordinates
-		bcs = [np.pad(bc_i, pad_i) for bc_i, pad_i in zip(bcs_cr, letts_cr_pads)]
+		bcs = [np.pad(bc_i, pad_i, mode='constant', constant_values=0.0) for bc_i, pad_i in zip(bcs_cr, letts_cr_pads)]
 
 		self.corpus_stats = {'bcs': bcs}
 
