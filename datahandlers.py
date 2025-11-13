@@ -79,7 +79,7 @@ class Gagl2020DataHandler():
             df = df.rename(columns={data[key]: key for key in keys})
             twords.append(np.unique(df.word.to_numpy(str)))
 
-        self.eeg_words = np.unique(np.concat(twords))
+        self.eeg_words = np.unique(np.concatenate(twords))
 
     def get_unique_words(self):
         if not hasattr(self, 'beh_words'):
@@ -87,7 +87,7 @@ class Gagl2020DataHandler():
         if not hasattr(self, 'eeg_words'):
             self.load_eeg_words()
         
-        self.unique_words = np.sort(np.unique( np.concat([self.beh_words, self.eeg_words]) ))
+        self.unique_words = np.sort(np.unique( np.concatenate([self.beh_words, self.eeg_words]) ))
 
         return self.unique_words
 
@@ -95,7 +95,8 @@ class Gagl2020DataHandler():
         if not hasattr(self, 'unique_words'):
             self.get_unique_words()
 
-        str_lens = np.strings.str_len(self.unique_words)
+        # str_lens = np.strings.str_len(self.unique_words)
+        str_lens = np.array([len(w) for w in self.unique_words])
 
         return (str_lens.min(), str_lens.max())
         
