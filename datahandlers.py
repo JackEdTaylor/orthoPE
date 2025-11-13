@@ -45,7 +45,7 @@ class Gagl2020DataHandler():
         data = data_dict[self.language]
         keys = ['subject','word','category']
 
-        df = pd.read_csv(f'{self.datapath}/{data['file']}', encoding='utf-8')
+        df = pd.read_csv(f'{self.datapath}/{data["file"]}', encoding='utf-8')
         df = df.rename(columns={data[key]: key for key in keys})
         # df['category'] = df['category'].map(data['catmap'])
         
