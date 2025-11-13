@@ -514,6 +514,19 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		self.corpus_stats = {'bcs': bcs}
 
 		return None
+	
+	def plot_stat(self, stat):
+		match stat:
+			case 'bcs':
+				fig, ax = plt.subplots()
+				im = ax.imshow(np.sum(self.corpus_stats['bcs'], axis=0), interpolation='none', cmap='binary')
+				divider = make_axes_locatable(ax)
+				cax = divider.append_axes('right', size='2.5%', pad=0.1)
+				fig.colorbar(im, cax=cax, orientation='vertical')
+				stat_lab = stat
+		
+		ax.set_title(stat_lab)
+		return fig, ax
 
 
 def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None):
