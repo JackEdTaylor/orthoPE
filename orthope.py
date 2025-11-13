@@ -464,7 +464,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 	def __create_opes_df__(self, words, estimates=None, save=True):
 
 		if estimates is None: 
-			estimates = ['pred_err_l1', 'pred_err_l2', 'pw_pred_err', 
+			estimates = ['pred_err_l1', 'pred_err_l2', 
 						 'pred_err_wd',
 						#  'pred_err_gwd',
 						]
