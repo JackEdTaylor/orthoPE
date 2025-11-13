@@ -382,14 +382,28 @@ class OrthopeEstimator():
 			x_crop = x[tuple(crop_idx)]
 		elif len(x.shape)==3:
 			# find non-zero elements (averaging across first axis of x)
-			nonzero_idx = np.where(x.mean(axis=0)!=0.0) if y_2d is None else np.where(y_2d!=0.0)
+			nonzero_idx = np.where(x.max(axis=0)!=0.0) if y_2d is None else np.where(y_2d!=0.0)
 			# create list of slices by which x should be indexed
 			crop_idx = [slice(np.min(d), np.max(d)+1) for d in nonzero_idx]
 			crop_idx.insert(0, slice(None))
 			x_crop = x[tuple(crop_idx)]
 		else:
 			raise ValueError('x must be 2d or 3d')
-		return(x_crop)
+		# calculate the pad_width required to undo the crop
+		pad_width = []
+		for i, slice_i in enumerate(crop_idx):
+			pad_width_i = []
+			if slice_i.start is None:
+				pad_width_i.append(0)
+			else:
+				pad_width_i.append(slice_i.start)
+			if slice_i.stop is None:
+				pad_width_i.append(0)
+			else:
+				pad_width_i.append(x.shape[i] - slice_i.stop)
+			pad_width.append(pad_width_i)
+
+		return(x_crop, pad_width)
 
 	def load_opes(self, input_words=None):
 
@@ -455,7 +469,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		# del dd_3d
 
 		# TO DO: switch to only calculating for each unique letter, and sum the weights for identical letters
-		print('Estimating within-letter barycentres...')
+		print('Getting letters and weights for each slot...')
 		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.array_dims)) for dd_i in dd]
 
 		del dd
@@ -485,7 +499,18 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 			letts.append( np.array([lett_slot_3d_i[np.array(list(c)).astype(int), :, :].mean(axis=0) for c in components]) )
 			letts_weights.append( np.array([np.sum(weights[np.array(list(c)).astype(int)]) for c in components]) )
 
-		bcs = [otfuns.get_w_barycentre(L, debias=False, weights=w, reg=0.0005, numItermax=int(1e7)) for L, w in zip(letts, letts_weights)]
+		letts_weights = [w / w.sum() for w in letts_weights]
+
+		# crop the images of letters to reduce array size
+		letts_cr_out = [self.__crop_to_content__(L, L.max(axis=0)) for L in letts]
+		letts_cr = [cr_out_i[0] for cr_out_i in letts_cr_out]
+		letts_cr_pads = [cr_out_i[1][1:] for cr_out_i in letts_cr_out]  # pad widths for undoing the crops (ignore the first axis, as the barycentres will be 2d)
+
+		print('Estimating within-letter barycentres...')
+		bcs_cr = [otfuns.get_w_barycentre(L, debias=False, weights=w, reg=0.0005, numItermax=int(1e7)) for L, w in zip(letts_cr, letts_weights)]
+
+		# now undo the crop to put the barycentres in the original coordinates
+		bcs = [np.pad(bc_i, pad_i) for bc_i, pad_i in zip(bcs_cr, letts_cr_pads)]
 
 		self.corpus_stats = {'bcs': bcs}
 
