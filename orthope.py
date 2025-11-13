@@ -613,19 +613,20 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		return opes_df
 
-def run_all_oPEs(language, font, input_words, n_letters=(5, 5), method='euclidean', data_label=None):
+def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None):
 
-	if method.lower() == 'euclidean':
-		for noise in noises:
-			for freq_min in min_freq_percs:
-				for freq_weight in (True, False):
-					if font == 'word':
-						gg = LetterOrthopeEstimator(language=language, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
-					else:
-						gg = OrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
-					gg.load_opes()
-	elif method.lower() == 'optimal_transport':
+	# Euclidean approach
+	for noise in noises:
 		for freq_min in min_freq_percs:
 			for freq_weight in (True, False):
-				gg = OptimalTransportOrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+				if font == 'word':
+					gg = LetterOrthopeEstimator(language=language, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+				else:
+					gg = OrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
 				gg.load_opes()
+
+	# Optimal Transport approach
+	for freq_min in min_freq_percs:
+		for freq_weight in (True, False):
+			gg = OptimalTransportOrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+			gg.load_opes()
