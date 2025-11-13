@@ -70,8 +70,8 @@ class OrthopeEstimator():
 		if estimates is None: 
 			estimates = ['n_pixels_l1', 'n_pixels_l2', 
 						 'pred_err_l1', 'pred_err_l2', 'pw_pred_err', 
-						 'pw_err_wd',
-						#  'pw_err_gwd',
+						 'pred_err_wd',
+						#  'pred_err_gwd',
 						 'mahalanobis', 'kalmanw_pred_err']
 		
 		n_obs   = 100 if self.noise > 0 else 1
@@ -275,14 +275,14 @@ class OrthopeEstimator():
 				ope = np.linalg.norm(e)
 			case 'pw_pred_err':
 				ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
-			case 'pw_err_wd':
+			case 'pred_err_wd':
 				if self.font == 'word' or self.noise!=0.0:
 					ope = np.nan
 				else:
 					ope = otfuns.get_w(
 						s = x.reshape(self.array_dims),
 						t = self.corpus_stats['mu'].reshape(self.array_dims))
-			case 'pw_err_gwd':
+			case 'pred_err_gwd':
 				if self.font == 'word' or self.noise!=0.0:
 					ope = np.nan
 				else:
@@ -460,6 +460,29 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		self.opespath = self.savepath / f'{opespath_prefix}.csv'
 
 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for OptimalTransportOrthopeEstimator()'
+
+	def __create_opes_df__(self, words, estimates=None, save=True):
+
+		if estimates is None: 
+			estimates = ['pred_err_l1', 'pred_err_l2', 'pw_pred_err', 
+						 'pred_err_wd',
+						#  'pred_err_gwd',
+						]
+		
+		n_obs   = 100 if self.noise > 0 else 1
+		opes_df = pd.DataFrame(index=words)
+
+		for est in estimates:
+			print(f'Computing estimates for {est}')
+			for word in tqdm(words):
+				opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
+				opes_df.at[word, est+'_mu']  = np.mean(opes)
+				opes_df.at[word, est+'_std'] = np.std(opes)
+
+		if save:
+			opes_df.to_csv(self.opespath)
+
+		return opes_df
 	
 	def estimate_corpus_stats(self, weight_by_freq=True):
 		
@@ -556,19 +579,39 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 				ope = abs(e).sum()
 			case 'pred_err_l2':
 				ope = np.linalg.norm(e)
-			case 'pw_err_wd':
+			case 'pred_err_wd':
 				if self.noise!=0.0:
 					ope = np.nan
 				else:
 					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
 					ope = np.sum(ope_L)
-			case 'pw_err_gwd':
+			case 'pred_err_gwd':
 				if self.noise!=0.0:
 					ope = np.nan
 				else:
 					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
 					ope = np.sum(ope_L)
 		return ope
+	
+	def load_opes(self, input_words=None):
+
+		if input_words is None:
+			input_words = self.input_words
+
+		if os.path.exists(self.opespath):
+			print('Loading existing oPE file...')
+			opes_df = pd.read_csv(self.opespath)
+			# CSV interprets index info as an unnamed column
+			opes_df.rename(columns={'Unnamed: 0':'word'}, inplace=True)
+
+			if len(opes_df.word.unique()) != set(input_words).issubset(opes_df.word.unique()):
+				warnings.warn(f'Loaded oPE file, but mismatch in words!')
+		else:
+			print(f'Calculating optimal transport oPE for {len(input_words)} inputs...')
+			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
+			opes_df = self.__create_opes_df__(words=input_words)
+
+		return opes_df
 
 def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None):
 
