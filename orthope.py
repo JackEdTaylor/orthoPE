@@ -24,6 +24,7 @@ min_freq_percs = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]  # 100%, top 90% freque
 special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸëïöüĳËÏÖÜĲäöüßÄÖÜẞáéíóúñÁÉÍÓÚÑ'  # special characters to include as alphabetic (in addition to string.ascii_letters)
 
 # self = OrthopeEstimator('german', 'courier', 0.0, ['Tisch', 'Lampe'], data_label='test')
+# self = OptimalTransportOrthopeEstimator('german', 'courier', 0.0, ['Tisch', 'Lampe'], data_label='test')
 
 class OrthopeEstimator():
 
@@ -452,6 +453,13 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
 		super().__init__(language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
+
+		# separate opespath if using the optimal transport estimator
+		data_label = '' if data_label is None else f'{data_label}_'
+		opespath_prefix = f'{data_label}{language}_{font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes_ot'.replace('.','p')  # add "_ot" suffix
+		self.opespath = self.savepath / f'{opespath_prefix}.csv'
+
+		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for OptimalTransportOrthopeEstimator()'
 	
 	def estimate_corpus_stats(self, weight_by_freq=True):
 		
@@ -511,15 +519,20 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		# now undo the crop to put the barycentres in the original coordinates
 		bcs = [np.pad(bc_i, pad_i, mode='constant', constant_values=0.0) for bc_i, pad_i in zip(bcs_cr, letts_cr_pads)]
 
-		self.corpus_stats = {'bcs': bcs}
+		# join into a single image
+		bcs_joined = np.sum(bcs, axis=0)
+
+		self.corpus_stats = {'bcs': bcs, 'bcs_joined': bcs_joined}
 
 		return None
 	
 	def plot_stat(self, stat):
+		if stat=='bcs_joined': stat = 'bcs'
+
 		match stat:
 			case 'bcs':
 				fig, ax = plt.subplots()
-				im = ax.imshow(np.sum(self.corpus_stats['bcs'], axis=0), interpolation='none', cmap='binary')
+				im = ax.imshow(np.sum(self.corpus_stats['bcs_joined'], axis=0), interpolation='none', cmap='binary')
 				divider = make_axes_locatable(ax)
 				cax = divider.append_axes('right', size='2.5%', pad=0.1)
 				fig.colorbar(im, cax=cax, orientation='vertical')
@@ -527,7 +540,35 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		
 		ax.set_title(stat_lab)
 		return fig, ax
+	
+	def __estimate_ope__(self, word, estimate):
 
+		x = self.__render_text__(word, noise=self.noise)
+		x_2d = x.reshape(self.array_dims)
+		e = x_2d - self.corpus_stats['bcs_joined']
+		
+		if '_wd' in estimate or '_gwd' in estimate:
+			x_letts = self.__split_word_img_letters__(x_2d)
+
+		match estimate:
+			case 'pred_err_l1':
+				# ope = e.sum()
+				ope = abs(e).sum()
+			case 'pred_err_l2':
+				ope = np.linalg.norm(e)
+			case 'pw_err_wd':
+				if self.noise!=0.0:
+					ope = np.nan
+				else:
+					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
+					ope = np.sum(ope_L)
+			case 'pw_err_gwd':
+				if self.noise!=0.0:
+					ope = np.nan
+				else:
+					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
+					ope = np.sum(ope_L)
+		return ope
 
 def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None):
 
