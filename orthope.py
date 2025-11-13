@@ -521,16 +521,17 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		letts = []
 		letts_weights = []
 		for lett_slot_3d_i in lett_slot_3d:
-			lett_slot_vecs_i = lett_slot_3d_i.reshape(lett_slot_3d_i.shape[0], -1)
+			lett_slot_3d_i_cr, _ = self.__crop_to_content__(lett_slot_3d_i)
+			lett_slot_vecs_i = lett_slot_3d_i_cr.reshape(lett_slot_3d_i_cr.shape[0], -1)
 			cors_i = np.corrcoef(lett_slot_vecs_i)
 			G = nx.from_numpy_array((cors_i >= identical_r).astype(int))  # graph of binary similarities
 			components = list(nx.connected_components(G))
 			letts.append( np.array([lett_slot_3d_i[np.array(list(c)).astype(int), :, :].mean(axis=0) for c in components]) )
 			letts_weights.append( np.array([np.sum(weights[np.array(list(c)).astype(int)]) for c in components]) )
+			del lett_slot_vecs_i, cors_i, G, components
 
+		print(f'N unique letters per slot: {[len(L) for L in letts]}')
 		letts_weights = [w / w.sum() for w in letts_weights]
-
-		del lett_slot_vecs_i, cors_i, G, components
 
 		# crop the images of letters to reduce array size
 		letts_cr_out = [self.__crop_to_content__(L, L.max(axis=0)) for L in letts]
