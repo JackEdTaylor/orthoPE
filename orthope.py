@@ -335,7 +335,7 @@ class OrthopeEstimator():
 
 		return text_array
 	
-	def __get_letter_space_locs__(self, x_2d, show=False):
+	def __get_letter_space_locs__(self, x_2d, intensity_thresh=0.1, show=False):
 		# Detects the locations of spaces between letters, assuming that there are no breaks along the x axis within glyphs of a width greater than 12 pixels.
 		max_xaxis = x_2d.max(axis=0)
 
@@ -350,7 +350,7 @@ class OrthopeEstimator():
 		space_locs = space_centres[1:-1]
 
 		# exclude peaks (troughs) that are more than 10% pixel intensity
-		space_centres = space_centres[max_xaxis[space_centres]<=0.1]
+		space_centres = space_centres[max_xaxis[space_centres]<=intensity_thresh]
 
 		if show:
 			plt.imshow(x_2d, interpolation='none', cmap='Greys')
