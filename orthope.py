@@ -24,7 +24,9 @@ min_freq_percs = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]  # 100%, top 90% freque
 special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸëïöüĳËÏÖÜĲäöüßÄÖÜẞáéíóúñÁÉÍÓÚÑ'  # special characters to include as alphabetic (in addition to string.ascii_letters)
 
 # self = OrthopeEstimator('german', 'courier', 0.0, ['Tisch', 'Lampe'], data_label='test')
+# self = OrthopeEstimator('german', 'verdana', 0.0, ['Tisch', 'Lampe'], data_label='test')
 # self = OptimalTransportOrthopeEstimator('german', 'courier', 0.0, ['Tisch', 'Lampe'], data_label='test')
+# self = OptimalTransportOrthopeEstimator('german', 'verdana', 0.0, ['Tisch', 'Lampe'], data_label='test')
 
 class OrthopeEstimator():
 
@@ -40,6 +42,7 @@ class OrthopeEstimator():
 		self.noise       = noise
 		self.freq_weight = freq_weight
 		self.input_words = input_words
+		self.font_size	 = 34
 
 		# store subset info (two-unit lists/tuples of >= and <= cutoffs)
 		#  - if just one number is given, this will be used as both >= and <= cutoff
@@ -57,6 +60,13 @@ class OrthopeEstimator():
 		self.corppath = self.datapath / Path('corpora')
 		self.fontpath = Path('fonts')
 		self.savepath = Path('models')
+
+		# lookup dictionary for font paths
+		self.font_dict   = {'courier'  : self.fontpath / 'couriernew.ttf',
+							'courieri' : self.fontpath / 'couriernewi.ttf',
+							'cambria'  : self.fontpath / 'cambria.ttf',
+							'verdana'  : self.fontpath / 'verdana.ttf',
+							'cambriai' : self.fontpath / 'cambriai.ttf'}
 
 		data_label = '' if data_label is None else f'{data_label}_'
 		opespath_prefix = f'{data_label}{language}_{font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes'.replace('.','p')
@@ -88,9 +98,8 @@ class OrthopeEstimator():
 			opes_df.to_csv(self.opespath)
 
 		return opes_df
-
-	def __render_corpora__(self):
 	
+	def __get_corpus__(self):
 		# Available corpora:
 		corpora = {
 			'german': {'file':'SUBTLEX-DE.tsv'},
@@ -125,9 +134,17 @@ class OrthopeEstimator():
 		fpmw_filter = [np.percentile(df.fpmw, self.freq_perc[0]), np.percentile(df.fpmw, self.freq_perc[1])]
 		df = df.loc[(df.fpmw>=fpmw_filter[0]) & (df.fpmw<=fpmw_filter[1])]
 
+		self.corpus_df = df
+
+		return None
+
+	def __render_corpora__(self):
+		if not hasattr(self, 'corpus_df'):
+			self.__get_corpus__()
+
 		# Computing corpus at pixel space assuming identical obs_noise
-		dd = np.array([self.__render_text__(word, noise=self.noise) for word in df['word']])
-		weights = df['fpmw'].to_numpy()
+		dd = np.array([self.__render_text__(word, noise=self.noise) for word in self.corpus_df['word']])
+		weights = self.corpus_df['fpmw'].to_numpy()
 
 		return dd, weights
 
@@ -301,30 +318,39 @@ class OrthopeEstimator():
 					ope = np.linalg.norm(self.corpus_stats['kal'] @ e)
 
 		return ope
+	
+	def __calculate_canvas_dims__(self, input_words=None, pad_w_per_char=8, pad_h=0):
+		if not hasattr(self, 'corpus_df'):
+			self.__get_corpus__()
 
-	def __render_text__(self, text, noise=0.0, standardise_length=True, show=False):
-
-		# Settings
-		font_size   = 34
-		if standardise_length:
-			canvas_dims = (int(round(22*len(text))), 36)
-		else:
-			canvas_dims = (int(round(22*self.n_letters[1])), 36)
-
-		if not hasattr(self, 'array_dims'):
-			self.array_dims = (canvas_dims[1], canvas_dims[0])
+		if input_words is None:
+			input_words = self.input_words
 		
-		font_dict   = {'courier'  : self.fontpath / 'couriernew.ttf',
-					   'courieri' : self.fontpath / 'couriernewi.ttf',
-					   'cambria'  : self.fontpath / 'cambria.ttf',
-					   'verdana'  : self.fontpath / 'verdana.ttf',
-					   'cambriai' : self.fontpath / 'cambriai.ttf'}
+		font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+
+		# get max width and height for the input and corpus words
+		test_words = set([*input_words, *self.corpus_df['word']])
+		pad_w = int(max([len(w) for w in test_words]) * pad_w_per_char)
+		font_dims = np.max([font.getbbox(w, anchor='lt')[2:] for w in test_words], axis=0) + np.array([pad_w, pad_h])
+
+		# store in self
+		self.canvas_dims = list(font_dims)
+		self.array_dims = (font_dims[1], font_dims[0])
+
+		return None
+
+	def __render_text__(self, text, noise=0.0, show=False):
+
+		if not hasattr(self, 'canvas_dims'):
+			self.__calculate_canvas_dims__()
+
+		# set up font		
+		font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
 
 		# Rendering text with pillow
-		render   = Image.new('L', canvas_dims, color=0)
+		render   = Image.new('L', self.canvas_dims, color=0)
 		draw     = ImageDraw.Draw(render)
-		font     = ImageFont.truetype(font_dict[self.font], font_size)
-		text_pos = ((canvas_dims[0] - font.getlength(text))/2, -7)
+		text_pos = ((self.canvas_dims[0] - font.getlength(text))/2, -7)
 		draw.text(text_pos, text, fill=255, font=font)
 		if show: render.show();
 
@@ -335,7 +361,7 @@ class OrthopeEstimator():
 
 		return text_array
 	
-	def __get_letter_space_locs__(self, x_2d, intensity_thresh=0.1, show=False):
+	def __get_letter_space_locs__(self, x_2d, show=False):
 		# Detects the locations of spaces between letters, assuming that there are no breaks along the x axis within glyphs of a width greater than 12 pixels.
 		max_xaxis = x_2d.max(axis=0)
 
@@ -344,13 +370,16 @@ class OrthopeEstimator():
 		max_xaxis[len(max_xaxis)-1] = max_xaxis.max()
 
 		# use peak-finding algorithm to get the spaces' locations
-		space_centres, _ = sp.signal.find_peaks(-max_xaxis, distance=12)  # minimum distance is assumed to be less than the expected width of a character
+		space_centres, _ = sp.signal.find_peaks(-max_xaxis, distance=4)  # minimum distance is quite low, because of proportional fonts
 
 		# now ignore the zeroes at the starts and ends of the words
 		space_locs = space_centres[1:-1]
 
-		# exclude peaks (troughs) that are more than 10% pixel intensity
-		space_locs = space_locs[max_xaxis[space_locs]<=intensity_thresh]
+		# get N deepest troughs
+		expected_spaces = self.n_letters[0]-1
+		space_locs_idx = np.argpartition(max_xaxis[space_locs], -expected_spaces)[-expected_spaces:]
+
+		space_locs = space_locs[space_locs_idx]
 
 		if show:
 			plt.imshow(x_2d, interpolation='none', cmap='Greys')
