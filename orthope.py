@@ -361,7 +361,26 @@ class OrthopeEstimator():
 
 		return text_array
 	
-	def __get_letter_space_locs__(self, x_2d, show=False):
+	def __render_text_at_pos__(self, text, text_pos, anchor=None, show=False):
+
+		if not hasattr(self, 'canvas_dims'):
+			self.__calculate_canvas_dims__()
+
+		# set up font		
+		font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+
+		# Rendering text with pillow
+		render   = Image.new('L', self.canvas_dims, color=0)
+		draw     = ImageDraw.Draw(render)
+		draw.text(text_pos, text, anchor=anchor, fill=255, font=font)
+		if show: render.show();
+	
+		text_array = np.array(render).flatten() / 255
+
+		return text_array
+	
+	def __get_letter_space_locs_from_xmax__(self, x_2d, expected_spaces=None, show=False):
+
 		# Detects the locations of spaces between letters, assuming that there are no breaks along the x axis within glyphs of a width greater than 12 pixels.
 		max_xaxis = x_2d.max(axis=0)
 
@@ -376,8 +395,9 @@ class OrthopeEstimator():
 		space_locs = space_centres[1:-1]
 
 		# get N deepest troughs
-		expected_spaces = self.n_letters[0]-1
-		space_locs_idx = np.argpartition(max_xaxis[space_locs], -expected_spaces)[-expected_spaces:]
+		if expected_spaces is None:
+			expected_spaces = self.n_letters[0]-1
+		space_locs_idx = np.argpartition(-max_xaxis[space_locs], -expected_spaces)[-expected_spaces:]
 
 		space_locs = space_locs[space_locs_idx]
 
@@ -386,29 +406,82 @@ class OrthopeEstimator():
 			plt.vlines(space_locs, ymin=0, ymax=x_2d.shape[0])
 			plt.show()
 
+		space_locs = np.sort(space_locs)
+
 		assert len(space_locs) >= self.n_letters[0]-1, f'Detected {len(space_locs)} spaces in a word image, but expected the min to be {self.n_letters[0]-1}'
 		assert len(space_locs) <= self.n_letters[1]-1, f'Detected {len(space_locs)} spaces in a word image, but expected the max to be {self.n_letters[1]-1}'
 
 		return space_locs
 	
-	def __split_word_img_letters__(self, x_2d, space_locs=None, **kwargs):
+	def __split_word_img_letters__(self, x_2d, word, use_cross_cor_meth=False, **kwargs):
 		# Input x_2d should be a 2d array of the word, with no noise.
 		# Returns an image for each detected letter in the word, with zeroes where the other characters were (can preserve the dimensions of the input in each output)
-		if space_locs is None:
-			space_locs = self.__get_letter_space_locs__(x_2d=x_2d, **kwargs)
-		space_locs = np.insert(space_locs, 0, 0.0)
 
-		x_2d_spl = []
-		for i in range(len(space_locs)):
-			x_2d_i = x_2d.copy()
+		if use_cross_cor_meth:
+			# the result will be approximate, but handles characters that overlap on the x axis
 
-			if i > 0:
-				x_2d_i[:, :space_locs[i]] = 0.0
+			# get arrays for each character
+			char_arrs = [self.__crop_to_content__(self.__render_text__(L).reshape(self.array_dims))[0] for L in word]
 
-			if i < len(space_locs)-1:
-				x_2d_i[:, space_locs[i+1]:] = 0.0
-				
-			x_2d_spl.append( x_2d_i )
+			# for each character, get the location in the image
+
+			# first, use 2d cross correlation to find likely locations
+			xy_cors = np.array([np.round(sp.signal.correlate(x_2d, y, method='fft', mode='same'), 5) for y in char_arrs])  # rounded for floating point precision in fft
+
+			xmins = []
+			x_2d_spl = []
+
+			while len(x_2d_spl)<len(word):
+				# assign the letter that matches with the current highest correlation
+				max_cors_per_L = xy_cors.max(axis=(1,2))
+				L_i = np.argmax(max_cors_per_L)
+
+				max_cor_idx = np.where(xy_cors[L_i, :, :] == max_cors_per_L[L_i])
+
+				# get border of letter
+				xmin = int( max_cor_idx[1][0] - np.ceil(char_arrs[L_i].shape[1]/2) )
+				# xmax = int( max_cor_idx[1][0] + np.ceil(char_arrs[L_i].shape[1]/2) )
+				xmins.append( xmin )
+
+				ymin = int( max_cor_idx[0][0] - np.ceil(char_arrs[L_i].shape[0]/2) )
+				# ymax = int( max_cor_idx[0][0] + np.ceil(char_arrs[L_i].shape[0]/2) )
+
+				# create the image with only this letter
+				# arr_L_i = self.__render_text_at_pos__(word[L_i], text_pos=[xmin+(xmax-xmin)/2, -7], anchor='ma').reshape(self.array_dims)
+
+				arr_L_i = np.pad(
+					char_arrs[L_i],
+					[[ymin, x_2d.shape[0]-char_arrs[L_i].shape[0]-ymin],
+					[xmin, x_2d.shape[1]-char_arrs[L_i].shape[1]-xmin]]
+				)
+				x_2d_spl.append( arr_L_i )
+
+				# zero-out the correlations for this character
+				xy_cors[L_i, :, :] = 0.0
+
+			# sort by where the letters start on the x axis
+			xmins_as = np.argsort(xmins)
+			x_2d_spl = np.array(x_2d_spl)[xmins_as, :, :]
+
+		else:
+			# just use the max on the x axis
+			space_locs = self.__get_letter_space_locs_from_xmax__(x_2d=x_2d, expected_spaces=len(word)-1, **kwargs)
+
+			space_locs = np.insert(space_locs, 0, 0.0)
+
+			x_2d_spl = []
+			for i in range(len(space_locs)):
+				x_2d_i = x_2d.copy()
+
+				if i > 0:
+					x_2d_i[:, :space_locs[i]] = 0.0
+
+				if i < len(space_locs)-1:
+					x_2d_i[:, space_locs[i+1]:] = 0.0
+					
+				x_2d_spl.append( x_2d_i )
+
+			x_2d_spl = np.array(x_2d_spl)
 
 		return x_2d_spl
 	
@@ -537,7 +610,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		# del dd_3d
 
 		print('Getting letters and weights for each slot...')
-		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.array_dims)) for dd_i in dd]
+		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.array_dims), word=w_i) for dd_i, w_i in zip(dd, self.corpus_df['word'])]
 
 		del dd
 
@@ -595,7 +668,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		match stat:
 			case 'bcs':
 				fig, ax = plt.subplots()
-				im = ax.imshow(np.sum(self.corpus_stats['bcs_joined'], axis=0), interpolation='none', cmap='binary')
+				im = ax.imshow(self.corpus_stats['bcs_joined'], interpolation='none', cmap='binary')
 				divider = make_axes_locatable(ax)
 				cax = divider.append_axes('right', size='2.5%', pad=0.1)
 				fig.colorbar(im, cax=cax, orientation='vertical')
@@ -611,7 +684,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		e = x_2d - self.corpus_stats['bcs_joined']
 		
 		if '_wd' in estimate or '_gwd' in estimate:
-			x_letts = self.__split_word_img_letters__(x_2d)
+			x_letts = self.__split_word_img_letters__(x_2d, word=word)
 
 		match estimate:
 			case 'pred_err_l1':
