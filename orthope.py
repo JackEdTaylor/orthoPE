@@ -350,11 +350,11 @@ class OrthopeEstimator():
 		space_locs = space_centres[1:-1]
 
 		# exclude peaks (troughs) that are more than 10% pixel intensity
-		space_centres = space_centres[max_xaxis[space_centres]<=intensity_thresh]
+		space_locs = space_locs[max_xaxis[space_locs]<=intensity_thresh]
 
 		if show:
 			plt.imshow(x_2d, interpolation='none', cmap='Greys')
-			plt.vlines(space_centres, ymin=0, ymax=x_2d.shape[0])
+			plt.vlines(space_locs, ymin=0, ymax=x_2d.shape[0])
 			plt.show()
 
 		assert len(space_locs) >= self.n_letters[0]-1, f'Detected {len(space_locs)} spaces in a word image, but expected the min to be {self.n_letters[0]-1}'
