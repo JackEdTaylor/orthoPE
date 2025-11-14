@@ -335,7 +335,7 @@ class OrthopeEstimator():
 
 		return text_array
 	
-	def __get_letter_space_locs__(self, x_2d):
+	def __get_letter_space_locs__(self, x_2d, show=False):
 		# Detects the locations of spaces between letters, assuming that there are no breaks along the x axis within glyphs of a width greater than 12 pixels.
 		max_xaxis = x_2d.max(axis=0)
 
@@ -346,18 +346,27 @@ class OrthopeEstimator():
 		# use peak-finding algorithm to get the spaces' locations
 		space_centres, _ = sp.signal.find_peaks(-max_xaxis, distance=12)  # minimum distance is assumed to be less than the expected width of a character
 
-		space_locs = space_centres[1:-1]  # now ignore the zeroes at the starts and ends of the words
+		# now ignore the zeroes at the starts and ends of the words
+		space_locs = space_centres[1:-1]
+
+		# exclude peaks (troughs) that are more than 10% pixel intensity
+		space_centres = space_centres[max_xaxis[space_centres]<=0.1]
+
+		if show:
+			plt.imshow(x_2d, interpolation='none', cmap='Greys')
+			plt.vlines(space_centres, ymin=0, ymax=x_2d.shape[0])
+			plt.show()
 
 		assert len(space_locs) >= self.n_letters[0]-1, f'Detected {len(space_locs)} spaces in a word image, but expected the min to be {self.n_letters[0]-1}'
 		assert len(space_locs) <= self.n_letters[1]-1, f'Detected {len(space_locs)} spaces in a word image, but expected the max to be {self.n_letters[1]-1}'
 
 		return space_locs
 	
-	def __split_word_img_letters__(self, x_2d, space_locs=None):
+	def __split_word_img_letters__(self, x_2d, space_locs=None, **kwargs):
 		# Input x_2d should be a 2d array of the word, with no noise.
 		# Returns an image for each detected letter in the word, with zeroes where the other characters were (can preserve the dimensions of the input in each output)
 		if space_locs is None:
-			space_locs = self.__get_letter_space_locs__(x_2d=x_2d)
+			space_locs = self.__get_letter_space_locs__(x_2d=x_2d, **kwargs)
 		space_locs = np.insert(space_locs, 0, 0.0)
 
 		x_2d_spl = []
