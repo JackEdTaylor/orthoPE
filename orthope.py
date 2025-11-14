@@ -426,7 +426,7 @@ class OrthopeEstimator():
 			# CSV interprets index info as an unnamed column
 			opes_df.rename(columns={'Unnamed: 0':'word'}, inplace=True)
 
-			if len(opes_df.word.unique()) != set(input_words).issubset(opes_df.word.unique()):
+			if len(opes_df.word.unique()) != len(set(input_words)) or not set(input_words).issubset(opes_df.word.unique()):
 				warnings.warn(f'Loaded oPE file, but mismatch in words!')
 		else:
 			print(f'Calculating oPE for {len(input_words)} inputs...')
