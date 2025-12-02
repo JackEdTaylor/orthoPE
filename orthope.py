@@ -708,7 +708,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 				if self.noise!=0.0:
 					ope = np.nan
 				else:
-					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
+					ope_L = [otfuns.get_gw(s = L, t = bc_i) for L, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
 					ope = np.sum(ope_L)
 		return ope
 	
@@ -883,7 +883,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 				if self.noise!=0.0:
 					ope = np.nan
 				else:
-					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
+					ope_L = [otfuns.get_gw(s = L, t = bc_i) for L, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
 					ope = np.sum(ope_L)
 		return ope
 	
