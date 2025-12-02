@@ -27,6 +27,8 @@ special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸ
 # self = OrthopeEstimator('german', 'verdana', 0.0, ['Tisch', 'Lampe'], data_label='test')
 # self = OptimalTransportOrthopeEstimator('german', 'courier', 0.0, ['Tisch', 'Lampe'], data_label='test')
 # self = OptimalTransportOrthopeEstimator('german', 'verdana', 0.0, ['Tisch', 'Lampe'], data_label='test')
+# self = WithinLetterOptimalTransportOrthopeEstimator('german', 'courier', 0.0, ['Tisch', 'Lampe'], data_label='test')
+# self = WithinLetterOptimalTransportOrthopeEstimator('german', 'verdana', 0.0, ['Tisch', 'Lampe'], data_label='test')
 
 class OrthopeEstimator():
 
@@ -703,6 +705,183 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 					ope = np.nan
 				else:
 					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
+					ope = np.sum(ope_L)
+		return ope
+	
+	def load_opes(self, input_words=None):
+
+		if input_words is None:
+			input_words = self.input_words
+
+		if os.path.exists(self.opespath):
+			print('Loading existing oPE file...')
+			opes_df = pd.read_csv(self.opespath)
+			# CSV interprets index info as an unnamed column
+			opes_df.rename(columns={'Unnamed: 0':'word'}, inplace=True)
+
+			if len(opes_df.word.unique()) != set(input_words).issubset(opes_df.word.unique()):
+				warnings.warn(f'Loaded oPE file, but mismatch in words!')
+		else:
+			print(f'Calculating optimal transport oPE for {len(input_words)} inputs...')
+			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
+			opes_df = self.__create_opes_df__(words=input_words)
+
+		return opes_df
+	
+class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
+	# this function is more efficient, but assumes only transports mass within letter slots
+
+	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
+		super().__init__(language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
+
+		# separate opespath if using the optimal transport estimator
+		data_label = '' if data_label is None else f'{data_label}_'
+		opespath_prefix = f'{data_label}{language}_{font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes_wlot'.replace('.','p')  # add "_wlot" suffix
+		self.opespath = self.savepath / f'{opespath_prefix}.csv'
+
+		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for WithinLetterOptimalTransportOrthopeEstimator()'
+
+	def __calculate_canvas_dims__(self, input_words=None, pad_w_per_char=8, pad_h=0):
+		# for this class, the canvas dimensions are only ever one character in width
+		if not hasattr(self, 'corpus_df'):
+			self.__get_corpus__()
+
+		if input_words is None:
+			input_words = self.input_words
+		
+		font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+
+		# get max width and height for the letters of the input and corpus words
+		input_letters = [l for ls in [list(w) for w in input_words] for l in ls]
+		corpus_letters = [l for ls in [list(w) for w in self.corpus_df.word] for l in ls]
+		test_letters = set([*input_letters, *corpus_letters])
+		pad_w = int(pad_w_per_char)
+		font_dims = np.max([font.getbbox(w, anchor='lt')[2:] for w in test_letters], axis=0) + np.array([pad_w, pad_h])
+
+		# store in self
+		self.canvas_dims = list(font_dims)
+		self.array_dims = (font_dims[1], font_dims[0])
+
+		return None
+
+	def __render_corpora__(self):
+		if not hasattr(self, 'corpus_df'):
+			self.__get_corpus__()
+
+		# for each slot, render all letters that occur in that slot
+		words_letts = [list(w) for w in self.corpus_df.word]
+
+		# (currently assumes that all words have the same length)
+		slot_letts_unique = [np.unique([wl[i] for wl in words_letts],
+								 return_inverse=True, return_counts=True)
+								 for i in range(self.n_letters[1])]
+		
+		slot_letts        = [slu[0] for slu in slot_letts_unique]
+		slot_letts_idx    = [slu[1] for slu in slot_letts_unique]  # for each word, the corresponding letter index for each slot
+		slot_letts_counts = [slu[2] for slu in slot_letts_unique]
+
+		# Computing corpus at pixel space assuming identical obs_noise
+		dd = [np.array(
+			[self.__render_text__(sl, noise=self.noise) for sl in slot_letts_i]
+			) for slot_letts_i in slot_letts]
+		lett_weights = slot_letts_counts
+
+		fpmw = self.corpus_df['fpmw'].to_numpy()
+
+		# weight the letter counts by corresponding word frequencies
+		word_weights = [np.array(
+			[np.sum(slc[i] * fpmw[sli == i]) for i in range(len(slc))]
+			) for slc, sli in zip(slot_letts_counts, slot_letts_idx)]
+
+		return dd, word_weights, lett_weights
+
+	def __create_opes_df__(self, words, estimates=None, save=True):
+
+		if estimates is None: 
+			estimates = ['pred_err_l1', 'pred_err_l2', 
+						 'pred_err_wd',
+						#  'pred_err_gwd',
+						]
+		
+		n_obs   = 100 if self.noise > 0 else 1
+		opes_df = pd.DataFrame(index=words)
+
+		for est in estimates:
+			print(f'Computing estimates for {est}')
+			for word in tqdm(words):
+				opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
+				opes_df.at[word, est+'_mu']  = np.mean(opes)
+				opes_df.at[word, est+'_std'] = np.std(opes)
+
+		if save:
+			opes_df.to_csv(self.opespath)
+
+		return opes_df
+	
+	def estimate_corpus_stats(self, weight_by_freq=True):
+		
+		print('Rendering corpus...')
+		dd, word_weights, lett_weights = self.__render_corpora__()
+		dd_2d = [[dd_ij.reshape(self.canvas_dims) for dd_ij in dd_i] for dd_i in dd]
+
+		# if weight_by_freq, then the weights will be frequency-weighted...
+		if weight_by_freq:
+			weights = word_weights
+		# ...otherwise, use the letter counts (comparable to the other classes)
+		else:
+			weights = lett_weights
+
+		print('Estimating within-letter barycentres...')
+		bcs = [otfuns.get_w_barycentre(np.array(L), debias=False, weights=w, reg=0.0005, numItermax=int(1e7)) for L, w in zip(dd_2d, weights)]
+
+		# join into a single image
+		bcs_joined = np.hstack(bcs, axis=0)
+
+		self.corpus_stats = {'bcs': bcs, 'bcs_joined': bcs_joined}
+
+		return None
+	
+	def plot_stat(self, stat):
+		if stat=='bcs_joined': stat = 'bcs'
+
+		match stat:
+			case 'bcs':
+				fig, ax = plt.subplots()
+				im = ax.imshow(self.corpus_stats['bcs_joined'], interpolation='none', cmap='binary')
+				divider = make_axes_locatable(ax)
+				cax = divider.append_axes('right', size='2.5%', pad=0.1)
+				fig.colorbar(im, cax=cax, orientation='vertical')
+				stat_lab = stat
+		
+		ax.set_title(stat_lab)
+		return fig, ax
+	
+	def __estimate_ope__(self, word, estimate):
+
+		x = [self.__render_text__(L, noise=self.noise) for L in list(word)]
+		x_2d = [x_i.reshape(self.array_dims) for x_i in x]
+
+		e = [x_2d_i - bc_i for x_2d_i, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
+		
+		if '_wd' in estimate or '_gwd' in estimate:
+			x_letts = self.__split_word_img_letters__(x_2d, word=word)
+
+		match estimate:
+			case 'pred_err_l1':
+				ope = abs(np.hstack(e)).sum()
+			case 'pred_err_l2':
+				ope = np.linalg.norm(np.hstack(e))
+			case 'pred_err_wd':
+				if self.noise!=0.0:
+					ope = np.nan
+				else:
+					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
+					ope = np.sum(ope_L)
+			case 'pred_err_gwd':
+				if self.noise!=0.0:
+					ope = np.nan
+				else:
+					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
 					ope = np.sum(ope_L)
 		return ope
 	
