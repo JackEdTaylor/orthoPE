@@ -837,7 +837,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		bcs = [otfuns.get_w_barycentre(np.array(L), debias=False, weights=w, reg=0.0005, numItermax=int(1e7)) for L, w in zip(dd_2d, weights)]
 
 		# join into a single image
-		bcs_joined = np.hstack(bcs, axis=0)
+		bcs_joined = np.hstack(bcs)
 
 		self.corpus_stats = {'bcs': bcs, 'bcs_joined': bcs_joined}
 
