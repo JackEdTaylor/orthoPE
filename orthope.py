@@ -684,12 +684,13 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 	def __estimate_ope__(self, word, estimate):
 
 		x = self.__render_text__(word, noise=self.noise)
+		x = [x_i / np.sum(x_i) for x_i in x]
 		x_2d = x.reshape(self.array_dims)
 		
 		if '_wd' in estimate or '_gwd' in estimate:
 			x_letts = self.__split_word_img_letters__(x_2d, word=word)
 
-		e = [x_2d_i/np.sum(x_2d_i) - bc_i for x_2d_i, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
+		e = [x_2d_i - bc_i for x_2d_i, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
 
 		match estimate:
 			case 'pred_err_l1':
@@ -862,9 +863,10 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 	def __estimate_ope__(self, word, estimate):
 
 		x = [self.__render_text__(L, noise=self.noise) for L in list(word)]
+		x = [x_i / np.sum(x_i) for x_i in x]
 		x_2d = [x_i.reshape(self.array_dims) for x_i in x]
 
-		e = [x_2d_i/np.sum(x_2d_i) - bc_i for x_2d_i, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
+		e = [x_2d_i - bc_i for x_2d_i, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
 
 		match estimate:
 			case 'pred_err_l1':
