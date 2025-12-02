@@ -685,10 +685,11 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		x = self.__render_text__(word, noise=self.noise)
 		x_2d = x.reshape(self.array_dims)
-		e = x_2d - self.corpus_stats['bcs_joined']
 		
 		if '_wd' in estimate or '_gwd' in estimate:
 			x_letts = self.__split_word_img_letters__(x_2d, word=word)
+
+		e = [x_2d_i/np.sum(x_2d_i) - bc_i for x_2d_i, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
 
 		match estimate:
 			case 'pred_err_l1':
@@ -863,10 +864,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		x = [self.__render_text__(L, noise=self.noise) for L in list(word)]
 		x_2d = [x_i.reshape(self.array_dims) for x_i in x]
 
-		e = [x_2d_i - bc_i for x_2d_i, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
-		
-		if '_wd' in estimate or '_gwd' in estimate:
-			x_letts = self.__split_word_img_letters__(x_2d, word=word)
+		e = [x_2d_i/np.sum(x_2d_i) - bc_i for x_2d_i, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
 
 		match estimate:
 			case 'pred_err_l1':
