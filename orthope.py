@@ -605,6 +605,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		if not weight_by_freq:
 			weights = np.ones(weights.shape)
 
+		weights /= np.sum(weights)
+
 		# print('Estimating word-level barycentre...')
 		# dd_3d = dd.reshape([-1, self.array_dims[0], self.array_dims[1]])  # reshape to 3d array of word * x * y
 		# bc = otfuns.get_w_barycentre(dd_3d, debias=False, weights=weights, reg=0.0005, numItermax=int(1e7))
@@ -826,10 +828,10 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		# if weight_by_freq, then the weights will be frequency-weighted...
 		if weight_by_freq:
-			weights = word_weights
+			weights = [w / np.sum(w) for w in word_weights]
 		# ...otherwise, use the letter counts (comparable to the other classes)
 		else:
-			weights = lett_weights
+			weights = [w / np.sum(w) for w in lett_weights]
 
 		print('Estimating within-letter barycentres...')
 		bcs = [otfuns.get_w_barycentre(np.array(L), debias=False, weights=w, reg=0.0005, numItermax=int(1e7)) for L, w in zip(dd_2d, weights)]
