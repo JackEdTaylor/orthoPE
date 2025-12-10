@@ -11,7 +11,7 @@ import string
 from pathlib import Path
 import collections
 from itertools import groupby
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from tqdm import tqdm
 import warnings
 
