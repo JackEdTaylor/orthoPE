@@ -69,7 +69,9 @@ class OrthopeEstimator():
 							'cambria'        : self.fontpath / 'cambria.ttf',
 							'verdana'        : self.fontpath / 'verdana.ttf',
 							'cambriai'       : self.fontpath / 'cambriai.ttf',
-							'liberationserif': self.fontpath / 'liberationserif.ttf'}
+							'liberationserif': self.fontpath / 'liberationserif.ttf',
+							'liberationmono' : self.fontpath / 'liberationmono.ttf',
+							'comic'          : self.fontpath / 'comic.ttf'}
 
 		data_label = '' if data_label is None else f'{data_label}_'
 		opespath_prefix = f'{data_label}{language}_{font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes'.replace('.','p')
