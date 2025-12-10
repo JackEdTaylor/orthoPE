@@ -24,12 +24,18 @@ min_freq_percs = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]  # 100%, top 90% freque
 
 special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸëïöüĳËÏÖÜĲäöüßÄÖÜẞáéíóúñÁÉÍÓÚÑ'  # special characters to include as alphabetic (in addition to string.ascii_letters)
 
-# self = OrthopeEstimator('german', 'courier', 0.0, ['Tisch', 'Lampe'], data_label='test')
-# self = OrthopeEstimator('german', 'verdana', 0.0, ['Tisch', 'Lampe'], data_label='test')
-# self = OptimalTransportOrthopeEstimator('german', 'courier', 0.0, ['Tisch', 'Lampe'], data_label='test')
-# self = OptimalTransportOrthopeEstimator('german', 'verdana', 0.0, ['Tisch', 'Lampe'], data_label='test')
-# self = WithinLetterOptimalTransportOrthopeEstimator('german', 'courier', 0.0, ['Tisch', 'Lampe'], data_label='test')
-# self = WithinLetterOptimalTransportOrthopeEstimator('german', 'verdana', 0.0, ['Tisch', 'Lampe'], data_label='test')
+# self = OrthopeEstimator('german', 'courier', noise=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
+# self = OrthopeEstimator('german', 'comic', prior_font='courier', noise=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
+# self = OrthopeEstimator('german', 'verdana', noise=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
+# self = OptimalTransportOrthopeEstimator('german', 'courier', noise=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
+# self = OptimalTransportOrthopeEstimator('german', 'verdana', noise=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
+# self = WithinLetterOptimalTransportOrthopeEstimator('german', 'courier', noise=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
+# self = WithinLetterOptimalTransportOrthopeEstimator('german', 'verdana', noise=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
+
+# self = ImageOrthopeEstimator(language='german', font='courier', noise=0.0, input_words=['data_repository/images/german/8_Raupi_pw_liberation mono.png', 'data_repository/images/german/10_Kruhs_pw_liberation mono.png', 'data_repository/images/german/17_Lobby_w_comic sans ms.png'], data_label='test')
+
+# self = ImageOrthopeEstimator(language='german', font='image', noise=0.0, input_words=None, data_label='test')
+
 
 class OrthopeEstimator():
 
