@@ -32,15 +32,16 @@ special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸ
 
 class OrthopeEstimator():
 
-	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
+	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
 		data_label_lab = '' if data_label is None else f'{data_label} '
 		freq_wt_lab = 'freq-weighted' if freq_weight else 'freq-unweighted'
-		print(f'{data_label_lab}{language}, font {font}, noise {noise}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
+		print(f'{data_label_lab}{language}, font {font}, prior_font {prior_font}, noise {noise}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
 
 		self.alphabet = string.ascii_letters + special + ' '
 
 		self.language    = language
 		self.font        = font
+		self.prior_font  = font if prior_font==None else prior_font
 		self.noise       = noise
 		self.freq_weight = freq_weight
 		self.input_words = input_words
@@ -74,7 +75,7 @@ class OrthopeEstimator():
 							'comic'          : self.fontpath / 'comic.ttf'}
 
 		data_label = '' if data_label is None else f'{data_label}_'
-		opespath_prefix = f'{data_label}{language}_{font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes'.replace('.','p')
+		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes'.replace('.','p')
 		self.opespath = self.savepath / f'{opespath_prefix}.csv'
 
 		if not os.path.exists(self.savepath): os.makedirs(self.savepath)
@@ -148,7 +149,7 @@ class OrthopeEstimator():
 			self.__get_corpus__()
 
 		# Computing corpus at pixel space assuming identical obs_noise
-		dd = np.array([self.__render_text__(word, noise=self.noise) for word in self.corpus_df['word']])
+		dd = np.array([self.__render_text__(word, is_prior=True, noise=self.noise) for word in self.corpus_df['word']])
 		weights = self.corpus_df['fpmw'].to_numpy()
 
 		return dd, weights
@@ -331,12 +332,24 @@ class OrthopeEstimator():
 		if input_words is None:
 			input_words = self.input_words
 		
-		font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+		unique_fonts = set([self.font, self.prior_font])
 
-		# get max width and height for the input and corpus words
-		test_words = set([*input_words, *self.corpus_df['word']])
-		pad_w = int(max([len(w) for w in test_words]) * pad_w_per_char)
-		font_dims = np.max([font.getbbox(w, anchor='lt')[2:] for w in test_words], axis=0) + np.array([pad_w, pad_h])
+		font_dims_f = []
+		for f_id in unique_fonts:
+			font = ImageFont.truetype(self.font_dict[f_id], self.font_size)
+
+			# get max width and height for the input and corpus words
+			test_words = set([*input_words, *self.corpus_df['word']])
+			pad_w = int(max([len(w) for w in test_words]) * pad_w_per_char)
+			font_dims_f.append( np.max([font.getbbox(w, anchor='lt')[2:] for w in test_words], axis=0) + np.array([pad_w, pad_h]) )
+		font_dims_f = np.array(font_dims_f)
+
+		# warn if the dimensions mismatch
+		if len(np.unique(font_dims_f[:, 0]))>1 or len(np.unique(font_dims_f[:, 1]))>1:
+			warnings.warn('Mismatch between dimensions of input font and prior font - will not make any attempt to align the fonts!')
+
+		# get the maximum in each dimension, for all tested fonts
+		font_dims = np.max(font_dims_f, axis=0)
 
 		# store in self
 		self.canvas_dims = list(font_dims)
@@ -344,13 +357,16 @@ class OrthopeEstimator():
 
 		return None
 
-	def __render_text__(self, text, noise=0.0, show=False):
+	def __render_text__(self, text, is_prior=False, noise=0.0, show=False):
 
 		if not hasattr(self, 'canvas_dims'):
 			self.__calculate_canvas_dims__()
 
-		# set up font		
-		font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+		# set up font
+		if is_prior:
+			font = ImageFont.truetype(self.font_dict[self.prior_font], self.font_size)
+		else:
+			font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
 
 		# Rendering text with pillow
 		render   = Image.new('L', self.canvas_dims, color=0)
@@ -418,7 +434,7 @@ class OrthopeEstimator():
 
 		return space_locs
 	
-	def __split_word_img_letters__(self, x_2d, word, use_cross_cor_meth=False, **kwargs):
+	def __split_word_img_letters__(self, x_2d, word, is_prior=False, use_cross_cor_meth=False, **kwargs):
 		# Input x_2d should be a 2d array of the word, with no noise.
 		# Returns an image for each detected letter in the word, with zeroes where the other characters were (can preserve the dimensions of the input in each output)
 
@@ -426,7 +442,7 @@ class OrthopeEstimator():
 			# the result will be approximate, but handles characters that overlap on the x axis
 
 			# get arrays for each character
-			char_arrs = [self.__crop_to_content__(self.__render_text__(L).reshape(self.array_dims))[0] for L in word]
+			char_arrs = [self.__crop_to_content__(self.__render_text__(L, is_prior=is_prior).reshape(self.array_dims))[0] for L in word]
 
 			# for each character, get the location in the image
 
@@ -567,12 +583,12 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
-	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
-		super().__init__(language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
+	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
+		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
-		opespath_prefix = f'{data_label}{language}_{font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes_ot'.replace('.','p')  # add "_ot" suffix
+		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes_ot'.replace('.','p')  # add "_ot" suffix
 		self.opespath = self.savepath / f'{opespath_prefix}.csv'
 
 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for OptimalTransportOrthopeEstimator()'
@@ -617,7 +633,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		# del dd_3d
 
 		print('Getting letters and weights for each slot...')
-		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.array_dims), word=w_i) for dd_i, w_i in zip(dd, self.corpus_df['word'])]
+		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.array_dims), word=w_i, is_prior=True) for dd_i, w_i in zip(dd, self.corpus_df['word'])]
 
 		del dd
 
@@ -690,7 +706,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		x_2d = x.reshape(self.array_dims)
 		
 		if '_wd' in estimate or '_gwd' in estimate:
-			x_letts = self.__split_word_img_letters__(x_2d, word=word)
+			x_letts = self.__split_word_img_letters__(x_2d, word=word, is_prior=False)
 
 		e = [x_2d_i - bc_i for x_2d_i, bc_i in zip(x_letts, self.corpus_stats['bcs'])]
 
@@ -737,12 +753,12 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 	# this function is more efficient, but assumes earlier on that mass is only transported within letter slots
 
-	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
-		super().__init__(language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
+	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
+		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
-		opespath_prefix = f'{data_label}{language}_{font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes_wlot'.replace('.','p')  # add "_wlot" suffix
+		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes_wlot'.replace('.','p')  # add "_wlot" suffix
 		self.opespath = self.savepath / f'{opespath_prefix}.csv'
 
 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for WithinLetterOptimalTransportOrthopeEstimator()'
