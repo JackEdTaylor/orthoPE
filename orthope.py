@@ -1051,7 +1051,8 @@ def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None)
 	if font != 'word':
 		for freq_min in min_freq_percs:
 			for freq_weight in (True, False):
-				gg = OptimalTransportOrthopeEstimator(language=language, font=font, noise=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+				# gg = OptimalTransportOrthopeEstimator(language=language, font=font, noise=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+				gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, noise=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
 				gg.load_opes()
 
 	# Euclidean approach
