@@ -564,7 +564,8 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 	def __init__(self, language, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
 		super().__init__(language, font='word', noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
 
-	def __render_text__(self, text, noise=0.0, show=False):
+	def __render_text__(self, text, is_prior=False, noise=0.0, show=False):
+		# note that is_prior is ignored for LetterOrthopeEstimator
 
 		# Settings
 		alphabet = self.alphabet
