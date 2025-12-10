@@ -684,7 +684,6 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 	def __estimate_ope__(self, word, estimate):
 
 		x = self.__render_text__(word, noise=self.noise)
-		x = [x_i / np.sum(x_i) for x_i in x]
 		x_2d = x.reshape(self.array_dims)
 		
 		if '_wd' in estimate or '_gwd' in estimate:
@@ -863,7 +862,6 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 	def __estimate_ope__(self, word, estimate):
 
 		x = [self.__render_text__(L, noise=self.noise) for L in list(word)]
-		x = [x_i / np.sum(x_i) for x_i in x]
 		x_2d = [x_i.reshape(self.array_dims) for x_i in x]
 
 		e = [x_2d_i - bc_i for x_2d_i, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
