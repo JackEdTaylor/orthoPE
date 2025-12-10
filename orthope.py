@@ -732,7 +732,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		return opes_df
 	
 class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
-	# this function is more efficient, but assumes only transports mass within letter slots
+	# this function is more efficient, but assumes earlier on that mass is only transported within letter slots
 
 	def __init__(self, language, font, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
 		super().__init__(language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
