@@ -924,6 +924,126 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 			opes_df = self.__create_opes_df__(words=input_words)
 
 		return opes_df
+	
+
+class ImageOrthopeEstimator(OrthopeEstimator):
+	# this function is equivalent to OrthopeEstimator, but works on images
+
+	# set image_prior=True to calculate the priors from the image corpus, using the images in the provided font - otherwise, will calculate the priors from prior_font
+
+	# set input_words=None to use all images in the images directory for the given language as input
+
+	def __init__(self, language, font, noise, input_words=None, prior_font=None, image_prior=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
+		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
+
+		self.image_prior = image_prior
+		self.font_size	  = 40  # based on expected height of images (used as a starting place, as we resize any rendered text so that the cropped content matches the dimensions of the images anyway)
+
+		# lookup for the ID in the image file paths associated with each of the possible fonts in the images (for when image_prior==True)
+		self.im_font_dict = {'courier'        : 'courier new',
+							 'liberationserif': 'liberation serif',
+							 'liberationmono' : 'liberation mono',
+							 'comic'          : 'comic sans ms'}
+
+		# if not input files provided, use all in the language's image directory
+		if self.input_words is None:
+			self.input_words = glob.glob(os.path.join('data_repository', 'images', self.language, '*.png'))
+
+		# check that the input_words are file paths
+		filepaths_exist = [os.path.isfile(fp) for fp in self.input_words]
+		assert all(filepaths_exist), 'Not all input_words exist as file paths'
+
+	def __calculate_prior_font_lims__(self, input_words=None, pad_w_per_char=8, pad_h=0):
+		if self.image_prior:
+			raise ValueError('Tried to calculate dimensions of prior font, but image_prior==True')
+		else:
+			if not hasattr(self, 'corpus_df'):
+				self.__get_corpus__()
+
+			if input_words is None:
+				input_words = self.input_words
+			
+			font = ImageFont.truetype(self.font_dict[self.prior_font], self.font_size)
+
+			# get max width and height for the input and corpus words
+			test_words = set([*input_words, *self.corpus_df['word']])
+			pad_w = int(max([len(w) for w in test_words]) * pad_w_per_char)
+			font_dims = np.max([font.getbbox(w, anchor='lt')[2:] for w in test_words], axis=0) + np.array([pad_w, pad_h])
+
+			# store in self
+			self.prior_font_canvas_dims = list(font_dims)
+			self.prior_font_array_dims = (font_dims[1], font_dims[0])
+
+		return None
+
+	def __calculate_canvas_dims__(self, input_words=None):
+		if input_words is None:
+			input_words = self.input_words
+
+		# get size(s) from the provided images
+		test_sizes = [Image.open(fp).convert('L').size for fp in input_words]
+		unique_sizes = np.unique(test_sizes, axis=0)
+
+		assert len(unique_sizes)==1, 'Inconsistent image sizes in input_words'
+
+		unique_sizes = unique_sizes.flatten()
+
+		# store in self
+		self.canvas_dims = list(unique_sizes)
+		self.array_dims = (unique_sizes[1], unique_sizes[0])
+
+		return None
+
+	def __render_text__(self, text, is_imagefile=False, noise=0.0, show=False):
+
+		if is_imagefile:
+			# load existing image with pillow
+			render = Image.open(text).convert('L')
+			# first, check that the average is >0.5, which should be the case if black on white background
+			render_avg = np.mean(render)/255
+			if render_avg < 0.5:
+				warnings.warn('Expected image files to be black text on white background, but average pixel value is <0.5')
+			# invert, because all the images should be black on white, and the analysis assumes white on black background (i.e., pixels with non-zero values are the text)
+			render = ImageOps.invert(render)
+		else:
+			if os.path.isfile(text):
+				warnings.warn('passed file as text - did you mean to set is_imagefile=True ?')
+
+			if not hasattr(self, 'canvas_dims'):
+				self.__calculate_canvas_dims__()
+
+			if not hasattr(self, 'prior_font_canvas_dims'):
+				self.__calculate_prior_font_lims__()
+
+			# set up font		
+			font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+
+			# Rendering text with pillow
+			render   = Image.new('L', self.canvas_dims, color=0)
+			draw     = ImageDraw.Draw(render)
+			text_pos = ((self.canvas_dims[0] - font.getlength(text))/2, -7)
+			draw.text(text_pos, text, fill=255, font=font)
+			if show: render.show();
+
+			# crop the x axis to the limits
+			render_array = np.array(render)
+			nonzero_idx = np.where(render_array!=0.0)
+			cr_x = slice(np.min(nonzero_idx[1]), np.max(nonzero_idx[1])+1)
+			render_array_cr = render_array[:, cr_x]
+			# and now resize the image to match the expected image dimensions
+			render = Image.fromarray(render_array_cr)
+			render = render.resize(self.canvas_dims)
+
+		# Applying additive Gaussian noise
+		render_array = np.array(render) / 255 # Normalise to r \in [0, 1]
+		noise_array  = noise * np.random.randn(*render_array.shape)
+		text_array   = (render_array + noise_array).flatten()
+
+		return text_array
+
+
+
+
 
 def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None):
 
