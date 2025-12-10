@@ -64,11 +64,12 @@ class OrthopeEstimator():
 		self.savepath = Path('models')
 
 		# lookup dictionary for font paths
-		self.font_dict   = {'courier'  : self.fontpath / 'couriernew.ttf',
-							'courieri' : self.fontpath / 'couriernewi.ttf',
-							'cambria'  : self.fontpath / 'cambria.ttf',
-							'verdana'  : self.fontpath / 'verdana.ttf',
-							'cambriai' : self.fontpath / 'cambriai.ttf'}
+		self.font_dict   = {'courier'        : self.fontpath / 'couriernew.ttf',
+							'courieri'       : self.fontpath / 'couriernewi.ttf',
+							'cambria'        : self.fontpath / 'cambria.ttf',
+							'verdana'        : self.fontpath / 'verdana.ttf',
+							'cambriai'       : self.fontpath / 'cambriai.ttf',
+							'liberationserif': self.fontpath / 'liberationserif.ttf'}
 
 		data_label = '' if data_label is None else f'{data_label}_'
 		opespath_prefix = f'{data_label}{language}_{font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes'.replace('.','p')
