@@ -207,7 +207,7 @@ class OrthopeEstimator():
 	
 	def __plot_2d_from_flat__(self, x_1d, cmap='binary', log_trans=False, **kwargs):
 		if log_trans:
-			x_1d = np.log(np.log)
+			x_1d = np.log(x_1d)
 
 		x_2d = x_1d.reshape(self.array_dims)
 		fig, ax = plt.subplots()
