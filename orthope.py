@@ -284,8 +284,12 @@ class OrthopeEstimator():
 			case 'sigma':
 				self.__plot_4dstat__(stat)
 			case 'pi':
+				if np.all(np.isnan(self.corpus_stats['pi'])):
+					raise ValueError('pi is nan (did not converge)')
 				self.__plot_4dstat__(stat, log_trans=True)
 			case 'pi_id':
+				if np.all(np.isinf(self.corpus_stats['pi_id'])):
+					raise ValueError('pi_id is inf (did not converge)')
 				self.__plot_2dstat__(stat, log_trans=True, cmap='viridis')
 			case 'kal':
 				self.__plot_4dstat__(stat)
