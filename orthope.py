@@ -176,6 +176,9 @@ class OrthopeEstimator():
 		
 		# Precission matrix: exact and assuming independent distributions
 		print('Estimating precision matrices...')
+		if self.noise == 0.0:
+			warnings.warn('Trying to estimate precision matrices but noise==0 - will probably not converge')
+		
 		try:
 			pi = scipy.linalg.pinvh(sigma)
 		except np.linalg.LinAlgError as e:
