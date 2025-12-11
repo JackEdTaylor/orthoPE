@@ -205,7 +205,10 @@ class OrthopeEstimator():
 
 		return None
 	
-	def __plot_2d_from_flat__(self, x_1d, cmap='binary', **kwargs):
+	def __plot_2d_from_flat__(self, x_1d, cmap='binary', log_trans=False, **kwargs):
+		if log_trans:
+			x_1d = np.log(np.log)
+
 		x_2d = x_1d.reshape(self.array_dims)
 		fig, ax = plt.subplots()
 		im = ax.imshow(x_2d, interpolation='none', cmap=cmap, **kwargs)
@@ -219,12 +222,11 @@ class OrthopeEstimator():
 			print(f'{stat} not (yet) estimated via estimate_corpus_stats')
 		else:
 			if log_trans:
-				stat_2d = np.log(stat_2d)
 				stat_lab = f'Log {stat}'
 			else:
 				stat_lab = stat
 
-			fig, ax = self.__plot_2d_from_flat__(self.corpus_stats[stat], cmap=cmap)
+			fig, ax = self.__plot_2d_from_flat__(self.corpus_stats[stat], cmap=cmap, log_trans=log_trans)
 			ax.set_title(stat_lab)
 
 			return fig, ax
