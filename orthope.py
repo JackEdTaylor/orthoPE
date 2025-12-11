@@ -637,6 +637,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		return opes_df
 	
 	def estimate_corpus_stats(self, weight_by_freq=True):
+		if weight_by_freq is None:
+			weight_by_freq = self.freq_weight
 		
 		print('Rendering corpus...')
 		dd, weights = self.__render_corpora__()
@@ -860,7 +862,9 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		return opes_df
 	
-	def estimate_corpus_stats(self, weight_by_freq=True):
+	def estimate_corpus_stats(self, weight_by_freq=None):
+		if weight_by_freq is None:
+			weight_by_freq = self.freq_weight
 		
 		print('Rendering corpus...')
 		dd, word_weights, lett_weights = self.__render_corpora__()
