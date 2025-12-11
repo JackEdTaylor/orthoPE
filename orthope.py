@@ -161,7 +161,10 @@ class OrthopeEstimator():
 
 		return dd, weights
 
-	def estimate_corpus_stats(self, weight_by_freq=True):
+	def estimate_corpus_stats(self, weight_by_freq=None):
+
+		if weight_by_freq is None:
+			weight_by_freq = self.freq_weight
 		
 		print('Rendering corpus...')
 		dd, weights = self.__render_corpora__()
