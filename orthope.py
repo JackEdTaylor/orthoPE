@@ -39,20 +39,23 @@ special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸ
 
 class OrthopeEstimator():
 
-	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
+	def __init__(self, language, font, noise, input_words, font_size=34, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=2, pad_top=1, pad_bottom=1, data_label=None):
 		data_label_lab = '' if data_label is None else f'{data_label} '
 		freq_wt_lab = 'freq-weighted' if freq_weight else 'freq-unweighted'
 		print(f'{data_label_lab}{language}, font {font}, prior_font {prior_font}, noise {noise}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
 
 		self.alphabet = string.ascii_letters + special + ' '
 
-		self.language    = language
-		self.font        = font
-		self.prior_font  = font if prior_font==None else prior_font
-		self.noise       = noise
-		self.freq_weight = freq_weight
-		self.input_words = input_words
-		self.font_size	 = 34
+		self.language       = language
+		self.font           = font
+		self.prior_font     = font if prior_font==None else prior_font
+		self.noise          = noise
+		self.freq_weight    = freq_weight
+		self.input_words    = input_words
+		self.font_size	    = font_size
+		self.pad_w_per_char = pad_w_per_char
+		self.pad_top        = pad_top
+		self.pad_bottom     = pad_bottom
 
 		# store subset info (two-unit lists/tuples of >= and <= cutoffs)
 		#  - if just one number is given, this will be used as both >= and <= cutoff
@@ -344,42 +347,69 @@ class OrthopeEstimator():
 
 		return ope
 	
-	def __calculate_canvas_dims__(self, input_words=None, pad_w_per_char=8, pad_h=0):
+	def __calculate_canvas_dims__(self, input_words=None, pad_w_per_char=None, pad_top=None, pad_bottom=None):
 		if not hasattr(self, 'corpus_df'):
 			self.__get_corpus__()
+
+		if pad_w_per_char is None:
+			pad_w_per_char = self.pad_w_per_char
+
+		if pad_top is None:
+			pad_top = self.pad_top
+		
+		if pad_bottom is None:
+			pad_bottom = self.pad_bottom
 
 		if input_words is None:
 			input_words = self.input_words
 		
 		unique_fonts = set([self.font, self.prior_font])
 
-		font_dims_f = []
+		# get max width and height for the input and corpus words
+		test_words = set([*input_words, *self.corpus_df['word']])
+		pad_w = int(max([len(w) for w in test_words]) * pad_w_per_char)
+		bbox_pad = np.array([-np.ceil(pad_w/2), -np.ceil(pad_top), np.ceil(pad_w/2), np.ceil(pad_bottom)]).astype(int)
+
+		font_bboxes_f = []
 		for f_id in unique_fonts:
 			font = ImageFont.truetype(self.font_dict[f_id], self.font_size)
+			bboxes = [font.getbbox(w, anchor='ms') for w in test_words]
+			xmin, ymin = np.array(bboxes)[:, :2].min(axis=0)
+			xmax, ymax = np.array(bboxes)[:, 2:].max(axis=0)
 
-			# get max width and height for the input and corpus words
-			test_words = set([*input_words, *self.corpus_df['word']])
-			pad_w = int(max([len(w) for w in test_words]) * pad_w_per_char)
-			font_dims_f.append( np.max([font.getbbox(w, anchor='lt')[2:] for w in test_words], axis=0) + np.array([pad_w, pad_h]) )
-		font_dims_f = np.array(font_dims_f)
+			font_bboxes_f.append( np.array([xmin, ymin, xmax, ymax]) + bbox_pad )
+		
+		font_bboxes_f = np.array(font_bboxes_f)
 
 		# warn if the dimensions mismatch
-		if len(np.unique(font_dims_f[:, 0]))>1 or len(np.unique(font_dims_f[:, 1]))>1:
-			warnings.warn('Mismatch between dimensions of input font and prior font - will not make any attempt to align the fonts!')
-
-		# get the maximum in each dimension, for all tested fonts
-		font_dims = np.max(font_dims_f, axis=0)
+		if np.unique(font_bboxes_f, axis=0).shape[0] > 1:
+			warnings.warn('Mismatch between dimensions of input font and prior font - will not make any attempt to align the fonts, and will use max extents!')
+			font_bboxes_f = np.array([font_bboxes_f[:, :2].min(axis=0),
+							   		  font_bboxes_f[:, 2:].max(axis=0)]).flatten()
+		else:
+			font_bboxes_f = font_bboxes_f.flatten()
 
 		# store in self
-		self.canvas_dims = list(font_dims)
-		self.array_dims = (font_dims[1], font_dims[0])
+		self.text_bbox   = list(font_bboxes_f)
+		self.canvas_dims = [sum([abs(self.text_bbox[i]) for i in [0, 2]]),
+					  		sum([abs(self.text_bbox[i]) for i in [1, 3]])]
+		self.array_dims  = (self.canvas_dims[1], self.canvas_dims[0])
 
 		return None
 
-	def __render_text__(self, text, is_prior=False, noise=0.0, show=False):
+	def __render_text__(self, text, is_prior=False, noise=0.0, pad_w_per_char=None, pad_top=None, pad_bottom=None, show=False):
 
 		if not hasattr(self, 'canvas_dims'):
-			self.__calculate_canvas_dims__()
+			self.__calculate_canvas_dims__(pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom)
+
+		if pad_w_per_char is None:
+			pad_w_per_char = self.pad_w_per_char
+
+		if pad_top is None:
+			pad_top = self.pad_top
+		
+		if pad_bottom is None:
+			pad_bottom = self.pad_bottom
 
 		# set up font
 		if is_prior:
@@ -390,32 +420,14 @@ class OrthopeEstimator():
 		# Rendering text with pillow
 		render   = Image.new('L', self.canvas_dims, color=0)
 		draw     = ImageDraw.Draw(render)
-		text_pos = ((self.canvas_dims[0] - font.getlength(text))/2, -7)
-		draw.text(text_pos, text, fill=255, font=font)
+		text_pos = (self.canvas_dims[0]/2, -self.text_bbox[1])
+		draw.text(text_pos, text, anchor='ms', fill=255, font=font)
 		if show: render.show();
 
 		# Applying additive Gaussian noise
 		render_array = np.array(render) / 255 # Normalise to r \in [0, 1]
 		noise_array  = noise * np.random.randn(*render_array.shape)
 		text_array   = (render_array + noise_array).flatten()
-
-		return text_array
-	
-	def __render_text_at_pos__(self, text, text_pos, anchor=None, show=False):
-
-		if not hasattr(self, 'canvas_dims'):
-			self.__calculate_canvas_dims__()
-
-		# set up font		
-		font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
-
-		# Rendering text with pillow
-		render   = Image.new('L', self.canvas_dims, color=0)
-		draw     = ImageDraw.Draw(render)
-		draw.text(text_pos, text, anchor=anchor, fill=255, font=font)
-		if show: render.show();
-	
-		text_array = np.array(render).flatten() / 255
 
 		return text_array
 	
@@ -453,7 +465,16 @@ class OrthopeEstimator():
 
 		return space_locs
 	
-	def __split_word_img_letters__(self, x_2d, word, is_prior=False, use_cross_cor_meth=False, **kwargs):
+	def __split_word_img_letters__(self, x_2d, word, is_prior=False, pad_w_per_char=None, pad_top=None, pad_bottom=None, use_cross_cor_meth=False, **kwargs):
+		if pad_w_per_char is None:
+			pad_w_per_char = self.pad_w_per_char
+
+		if pad_top is None:
+			pad_top = self.pad_top
+		
+		if pad_bottom is None:
+			pad_bottom = self.pad_bottom
+
 		# Input x_2d should be a 2d array of the word, with no noise.
 		# Returns an image for each detected letter in the word, with zeroes where the other characters were (can preserve the dimensions of the input in each output)
 
@@ -461,7 +482,7 @@ class OrthopeEstimator():
 			# the result will be approximate, but handles characters that overlap on the x axis
 
 			# get arrays for each character
-			char_arrs = [self.__crop_to_content__(self.__render_text__(L, is_prior=is_prior).reshape(self.array_dims))[0] for L in word]
+			char_arrs = [self.__crop_to_content__(self.__render_text__(L, is_prior=is_prior, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom).reshape(self.array_dims))[0] for L in word]
 
 			# for each character, get the location in the image
 
@@ -485,9 +506,6 @@ class OrthopeEstimator():
 
 				ymin = int( max_cor_idx[0][0] - np.ceil(char_arrs[L_i].shape[0]/2) )
 				# ymax = int( max_cor_idx[0][0] + np.ceil(char_arrs[L_i].shape[0]/2) )
-
-				# create the image with only this letter
-				# arr_L_i = self.__render_text_at_pos__(word[L_i], text_pos=[xmin+(xmax-xmin)/2, -7], anchor='ma').reshape(self.array_dims)
 
 				arr_L_i = np.pad(
 					char_arrs[L_i],
@@ -583,8 +601,8 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 	def __init__(self, language, noise, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
 		super().__init__(language, font='word', noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
 
-	def __render_text__(self, text, is_prior=False, noise=0.0, show=False):
-		# note that is_prior is ignored for LetterOrthopeEstimator
+	def __render_text__(self, text, is_prior=False, pad_w_per_char=None, pad_top=None, pad_bottom=None, noise=0.0, show=False):
+		# note that is_prior and the pad_* arguments are ignored for LetterOrthopeEstimator
 
 		# Settings
 		alphabet = self.alphabet
@@ -603,8 +621,8 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
-	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
-		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
+	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=2, pad_top=1, pad_bottom=1, data_label=None):
+		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
@@ -785,26 +803,57 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for WithinLetterOptimalTransportOrthopeEstimator()'
 
-	def __calculate_canvas_dims__(self, input_words=None, pad_w_per_char=8, pad_h=0):
+	def __calculate_canvas_dims__(self, input_words=None, pad_w_per_char=None, pad_top=None, pad_bottom=None):
 		# for this class, the canvas dimensions are only ever one character in width
 		if not hasattr(self, 'corpus_df'):
 			self.__get_corpus__()
 
+		if pad_w_per_char is None:
+			pad_w_per_char = self.pad_w_per_char
+
+		if pad_top is None:
+			pad_top = self.pad_top
+		
+		if pad_bottom is None:
+			pad_bottom = self.pad_bottom
+
 		if input_words is None:
 			input_words = self.input_words
-		
-		font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
 
-		# get max width and height for the letters of the input and corpus words
+		unique_fonts = set([self.font, self.prior_font])
+
+		# get max width and height for the input and corpus letters
 		input_letters = [l for ls in [list(w) for w in input_words] for l in ls]
 		corpus_letters = [l for ls in [list(w) for w in self.corpus_df.word] for l in ls]
 		test_letters = set([*input_letters, *corpus_letters])
-		pad_w = int(pad_w_per_char)
-		font_dims = np.max([font.getbbox(w, anchor='lt')[2:] for w in test_letters], axis=0) + np.array([pad_w, pad_h])
+
+		pad_w = int(np.ceil(pad_w_per_char))
+		bbox_pad = np.array([-np.ceil(pad_w/2), -np.ceil(pad_top), np.ceil(pad_w/2), np.ceil(pad_bottom)]).astype(int)	
+		
+		font_bboxes_f = []
+		for f_id in unique_fonts:
+			font = ImageFont.truetype(self.font_dict[f_id], self.font_size)
+			bboxes = [font.getbbox(L, anchor='ms') for L in test_letters]
+			xmin, ymin = np.array(bboxes)[:, :2].min(axis=0)
+			xmax, ymax = np.array(bboxes)[:, 2:].max(axis=0)
+
+			font_bboxes_f.append( np.array([xmin, ymin, xmax, ymax]) + bbox_pad )
+		
+		font_bboxes_f = np.array(font_bboxes_f)
+
+		# warn if the dimensions mismatch
+		if np.unique(font_bboxes_f, axis=0).shape[0] > 1:
+			warnings.warn('Mismatch between dimensions of input font and prior font - will not make any attempt to align the fonts, and will use max extents!')
+			font_bboxes_f = np.array([font_bboxes_f[:, :2].min(axis=0),
+							   		  font_bboxes_f[:, 2:].max(axis=0)]).flatten()
+		else:
+			font_bboxes_f = font_bboxes_f.flatten()
 
 		# store in self
-		self.canvas_dims = list(font_dims)
-		self.array_dims = (font_dims[1], font_dims[0])
+		self.text_bbox   = list(font_bboxes_f)
+		self.canvas_dims = [sum([abs(self.text_bbox[i]) for i in [0, 2]]),
+					  		sum([abs(self.text_bbox[i]) for i in [1, 3]])]
+		self.array_dims  = (self.canvas_dims[1], self.canvas_dims[0])
 
 		return None
 
@@ -826,7 +875,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		# Computing corpus at pixel space assuming identical obs_noise
 		dd = [np.array(
-			[self.__render_text__(sl, noise=self.noise) for sl in slot_letts_i]
+			[self.__render_text__(sl, is_prior=True, noise=self.noise) for sl in slot_letts_i]
 			) for slot_letts_i in slot_letts]
 		lett_weights = slot_letts_counts
 
@@ -868,7 +917,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		
 		print('Rendering corpus...')
 		dd, word_weights, lett_weights = self.__render_corpora__()
-		dd_2d = [[dd_ij.reshape(self.canvas_dims) for dd_ij in dd_i] for dd_i in dd]
+		dd_2d = [[dd_ij.reshape(self.array_dims) for dd_ij in dd_i] for dd_i in dd]
 
 		# if weight_by_freq, then the weights will be frequency-weighted...
 		if weight_by_freq:
