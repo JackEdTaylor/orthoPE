@@ -1497,6 +1497,6 @@ def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None)
 					gg = LetterOrthopeEstimator(language=language, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
 					gg.load_opes()
 				else:
-					for force_monospace in (True, False)
+					for force_monospace in (True, False):
 						gg = OrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
 						gg.load_opes()
