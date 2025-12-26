@@ -39,23 +39,24 @@ special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸ
 
 class OrthopeEstimator():
 
-	def __init__(self, language, font, noise, input_words, font_size=34, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=2, pad_top=1, pad_bottom=1, data_label=None):
+	def __init__(self, language, font, noise, input_words, font_size=32, prior_font=None, force_monospace=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=0, pad_top=0, pad_bottom=0, data_label=None):
 		data_label_lab = '' if data_label is None else f'{data_label} '
 		freq_wt_lab = 'freq-weighted' if freq_weight else 'freq-unweighted'
-		print(f'{data_label_lab}{language}, font {font}, prior_font {prior_font}, noise {noise}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
+		print(f'{data_label_lab}{language}, font {font}, prior_font {prior_font}, monospace {force_monospace}, noise {noise}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
 
 		self.alphabet = string.ascii_letters + special + ' '
 
-		self.language       = language
-		self.font           = font
-		self.prior_font     = font if prior_font==None else prior_font
-		self.noise          = noise
-		self.freq_weight    = freq_weight
-		self.input_words    = input_words
-		self.font_size	    = font_size
-		self.pad_w_per_char = pad_w_per_char
-		self.pad_top        = pad_top
-		self.pad_bottom     = pad_bottom
+		self.language        = language
+		self.font            = font
+		self.prior_font      = font if prior_font==None else prior_font
+		self.force_monospace = force_monospace
+		self.noise           = noise
+		self.freq_weight     = freq_weight
+		self.input_words     = input_words
+		self.font_size	     = font_size
+		self.pad_w_per_char  = pad_w_per_char
+		self.pad_top         = pad_top
+		self.pad_bottom      = pad_bottom
 
 		# store subset info (two-unit lists/tuples of >= and <= cutoffs)
 		#  - if just one number is given, this will be used as both >= and <= cutoff
@@ -85,7 +86,7 @@ class OrthopeEstimator():
 							'comic'          : self.fontpath / 'comic.ttf'}
 
 		data_label = '' if data_label is None else f'{data_label}_'
-		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes'.replace('.','p')
+		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}_noise-{noise}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_mono-{force_monospace}_opes'.replace('.','p')
 		self.opespath = self.savepath / f'{opespath_prefix}.csv'
 
 		if not os.path.exists(self.savepath): os.makedirs(self.savepath)
@@ -164,44 +165,64 @@ class OrthopeEstimator():
 
 		return dd, weights
 
-	def estimate_corpus_stats(self, weight_by_freq=None):
+	def estimate_corpus_stats(self, weight_by_freq=None, max_iter=1000):
 
 		if weight_by_freq is None:
 			weight_by_freq = self.freq_weight
+
+		print('Rendering corpus and estimating stats...')
 		
-		print('Rendering corpus...')
-		dd, weights = self.__render_corpora__()
+		fit_done = False
+		iter_i = 0
+		while not fit_done:
+			iter_i += 1
+			dd, weights = self.__render_corpora__()
 
-		if not weight_by_freq:
-			weights = np.ones(weights.shape)
+			if not weight_by_freq:
+				weights = np.ones(weights.shape)
 
-		# Estimating stats
-		print('Estimating mu and sigma...')
-		mu    = np.average(dd, axis=0, weights=weights)
-		sigma = np.cov(dd, rowvar=False, aweights=weights)
-		
-		# Precission matrix: exact and assuming independent distributions
-		print('Estimating precision matrices...')
-		if self.noise == 0.0:
-			warnings.warn('Trying to estimate precision matrices but noise==0 - will probably not converge')
-		
-		try:
-			pi = scipy.linalg.pinvh(sigma)
-		except np.linalg.LinAlgError as e:
-			print(f'LinAlgError: {e}')
-			pi = np.nan
+			# Estimating stats
+			# print('Estimating mu and sigma...')
+			mu    = np.average(dd, axis=0, weights=weights)
+			sigma = np.cov(dd, rowvar=False, aweights=weights)
+			
+			# Precission matrix: exact and assuming independent distributions
+			# print('Estimating precision matrices...')
+			if self.noise == 0.0:
+				warnings.warn('Setting precision matrices to np.inf, as noise==0')
+				pi = np.zeros(sigma.shape)
+				pi[:] = np.inf
+			else:
+				try:
+					pi = scipy.linalg.pinvh(sigma)
+				except np.linalg.LinAlgError as e:
+					# print(f'LinAlgError: {e}')
+					if iter_i < max_iter:
+						continue
+					pi = np.zeros(sigma.shape)
+					pi[:] = np.nan
 
-		pi_id = 1 / (np.diag(sigma))
+			pi_id = 1 / (np.diag(sigma))
 
-		# Kalman gain assuming same obs_noise in past and current experiences
-		print('Estimating Kalman gain...')
-		obs_sigma = self.noise * np.identity(sigma.shape[0])
+			# Kalman gain assuming same obs_noise in past and current experiences
+			# print('Estimating Kalman gain...')
+			obs_sigma = self.noise * np.identity(sigma.shape[0])
 
-		try:
-			kal = sigma @ np.linalg.pinv(sigma + obs_sigma)
-		except np.linalg.LinAlgError as e:
-			print(f'LinAlgError: {e}')
-			kal = np.nan
+			try:
+				kal = sigma @ np.linalg.pinv(sigma + obs_sigma)
+			except np.linalg.LinAlgError as e:
+				# print(f'LinAlgError: {e}')
+				if iter_i < max_iter:
+					continue
+				kal = np.zeros(sigma.shape)
+				kal[:] = np.nan
+
+			if iter_i < max_iter:
+				print(f'Fit all corpus stats after {iter_i} attempts at rendering')
+			else:
+				print(f'Failed to fit all corpus stats after {iter_i} attempts at rendering')
+
+			fit_done = True
 
 		self.corpus_stats = {'mu':    mu, 
 							 'sigma': sigma,
@@ -215,7 +236,7 @@ class OrthopeEstimator():
 		if log_trans:
 			x_1d = np.log(x_1d)
 
-		x_2d = x_1d.reshape(self.array_dims)
+		x_2d = x_1d.reshape(self.full_array_dims)
 		fig, ax = plt.subplots()
 		im = ax.imshow(x_2d, interpolation='none', cmap=cmap, **kwargs)
 		divider = make_axes_locatable(ax)
@@ -241,7 +262,7 @@ class OrthopeEstimator():
 		if not hasattr(self, 'corpus_stats') or stat not in self.corpus_stats:
 			print(f'{stat} not (yet) estimated via estimate_corpus_stats')
 		else:
-			stat_4d = self.corpus_stats[stat].reshape((self.array_dims[0], self.array_dims[1], self.array_dims[0], self.array_dims[1]))
+			stat_4d = self.corpus_stats[stat].reshape((self.full_array_dims[0], self.full_array_dims[1], self.full_array_dims[0], self.full_array_dims[1]))
 
 			stat_lab = f'log {stat}' if log_trans else stat
 
@@ -325,29 +346,29 @@ class OrthopeEstimator():
 					ope = np.nan
 				else:
 					ope = otfuns.get_w(
-						s = x.reshape(self.array_dims),
-						t = self.corpus_stats['mu'].reshape(self.array_dims))
+						s = x.reshape(self.full_array_dims),
+						t = self.corpus_stats['mu'].reshape(self.full_array_dims))
 			case 'pred_err_gwd':
 				if self.font == 'word' or self.noise!=0.0:
 					ope = np.nan
 				else:
 					ope = otfuns.get_gw(
-						s = x.reshape(self.array_dims),
-						t = self.corpus_stats['mu'].reshape(self.array_dims))
+						s = x.reshape(self.full_array_dims),
+						t = self.corpus_stats['mu'].reshape(self.full_array_dims))
 			case 'mahalanobis':
-				if np.size(self.corpus_stats['pi'])==1 and np.isnan(self.corpus_stats['pi']):
+				if np.all(np.isnan(self.corpus_stats['pi'])):
 					ope = np.nan
 				else:
 					ope = (e @ self.corpus_stats['pi'] @ e.T)**.5
 			case 'kalmanw_pred_err':
-				if np.size(self.corpus_stats['kal'])==1 and np.isnan(self.corpus_stats['kal']):
+				if np.all(np.isnan(self.corpus_stats['kal'])):
 					ope = np.nan
 				else:
 					ope = np.linalg.norm(self.corpus_stats['kal'] @ e)
 
 		return ope
 	
-	def __calculate_canvas_dims__(self, input_words=None, pad_w_per_char=None, pad_top=None, pad_bottom=None):
+	def __calculate_canvas_dims__(self, input_words=None, force_monospace=None, pad_w_per_char=None, pad_top=None, pad_bottom=None):
 		if not hasattr(self, 'corpus_df'):
 			self.__get_corpus__()
 
@@ -362,18 +383,34 @@ class OrthopeEstimator():
 
 		if input_words is None:
 			input_words = self.input_words
-		
-		unique_fonts = set([self.font, self.prior_font])
 
-		# get max width and height for the input and corpus words
-		test_words = set([*input_words, *self.corpus_df['word']])
-		pad_w = int(max([len(w) for w in test_words]) * pad_w_per_char)
-		bbox_pad = np.array([-np.ceil(pad_w/2), -np.ceil(pad_top), np.ceil(pad_w/2), np.ceil(pad_bottom)]).astype(int)
+		if force_monospace is None:
+			force_monospace = self.force_monospace
+
+		if force_monospace:
+			unique_fonts = set([self.font, self.prior_font])
+
+			# get max width and height for the input and corpus letters
+			input_letters = [l for ls in [list(w) for w in input_words] for l in ls]
+			corpus_letters = [l for ls in [list(w) for w in self.corpus_df.word] for l in ls]
+			test_text = set([*input_letters, *corpus_letters])
+
+			pad_w = int(np.ceil(pad_w_per_char))
+			bbox_pad = np.array([-np.ceil(pad_w/2), -np.ceil(pad_top), np.ceil(pad_w/2), np.ceil(pad_bottom)]).astype(int)
+
+		else:
+			unique_fonts = set([self.font, self.prior_font])
+
+			# get max width and height for the input and corpus words
+			test_text = set([*input_words, *self.corpus_df['word']])
+
+			pad_w = int(max([len(w) for w in test_text]) * pad_w_per_char)
+			bbox_pad = np.array([-np.ceil(pad_w/2), -np.ceil(pad_top), np.ceil(pad_w/2), np.ceil(pad_bottom)]).astype(int)
 
 		font_bboxes_f = []
 		for f_id in unique_fonts:
 			font = ImageFont.truetype(self.font_dict[f_id], self.font_size)
-			bboxes = [font.getbbox(w, anchor='ms') for w in test_words]
+			bboxes = [font.getbbox(w, anchor='ms') for w in test_text]
 			xmin, ymin = np.array(bboxes)[:, :2].min(axis=0)
 			xmax, ymax = np.array(bboxes)[:, 2:].max(axis=0)
 
@@ -383,9 +420,9 @@ class OrthopeEstimator():
 
 		# warn if the dimensions mismatch
 		if np.unique(font_bboxes_f, axis=0).shape[0] > 1:
-			warnings.warn('Mismatch between dimensions of input font and prior font - will not make any attempt to align the fonts, and will use max extents!')
+			warnings.warn('Mismatch between dimensions of input font and prior font - will use max extents. Check font alignment!')
 			font_bboxes_f = np.array([font_bboxes_f[:, :2].min(axis=0),
-							   		  font_bboxes_f[:, 2:].max(axis=0)]).flatten()
+									font_bboxes_f[:, 2:].max(axis=0)]).flatten()
 		else:
 			font_bboxes_f = font_bboxes_f.flatten()
 
@@ -395,12 +432,20 @@ class OrthopeEstimator():
 					  		sum([abs(self.text_bbox[i]) for i in [1, 3]])]
 		self.array_dims  = (self.canvas_dims[1], self.canvas_dims[0])
 
+		# get dimensions for full image (only differs if force_monospace=True)
+		if force_monospace:
+			self.full_canvas_dims = [self.canvas_dims[0]*max(self.n_letters), self.canvas_dims[1]]
+			self.full_array_dims  = (self.full_canvas_dims[1], self.full_canvas_dims[0])
+		else:
+			self.full_canvas_dims = self.canvas_dims
+			self.full_array_dims  = self.array_dims
+
 		return None
 
-	def __render_text__(self, text, is_prior=False, noise=0.0, pad_w_per_char=None, pad_top=None, pad_bottom=None, show=False):
+	def __render_text__(self, text, is_prior=False, noise=0.0, force_monospace=None, pad_w_per_char=None, pad_top=None, pad_bottom=None, show=False):
 
 		if not hasattr(self, 'canvas_dims'):
-			self.__calculate_canvas_dims__(pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom)
+			self.__calculate_canvas_dims__(pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, force_monospace=force_monospace)
 
 		if pad_w_per_char is None:
 			pad_w_per_char = self.pad_w_per_char
@@ -411,23 +456,31 @@ class OrthopeEstimator():
 		if pad_bottom is None:
 			pad_bottom = self.pad_bottom
 
-		# set up font
-		if is_prior:
-			font = ImageFont.truetype(self.font_dict[self.prior_font], self.font_size)
+		if force_monospace is None:
+			force_monospace = self.force_monospace
+
+		if force_monospace:
+			array_2d_list = [ self.__render_text__(text=L, is_prior=is_prior, noise=noise, force_monospace=False, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, show=show).reshape(self.array_dims) for L in text]
+			text_array_2d = np.hstack(array_2d_list)
+			text_array    = text_array_2d.flatten()
 		else:
-			font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+			# set up font
+			if is_prior:
+				font = ImageFont.truetype(self.font_dict[self.prior_font], self.font_size)
+			else:
+				font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
 
-		# Rendering text with pillow
-		render   = Image.new('L', self.canvas_dims, color=0)
-		draw     = ImageDraw.Draw(render)
-		text_pos = (self.canvas_dims[0]/2, -self.text_bbox[1])
-		draw.text(text_pos, text, anchor='ms', fill=255, font=font)
-		if show: render.show();
+			# Rendering text with pillow
+			render   = Image.new('L', self.canvas_dims, color=0)
+			draw     = ImageDraw.Draw(render)
+			text_pos = (self.canvas_dims[0]/2, -self.text_bbox[1])
+			draw.text(text_pos, text, anchor='ms', fill=255, font=font)
+			if show: render.show();
 
-		# Applying additive Gaussian noise
-		render_array = np.array(render) / 255 # Normalise to r \in [0, 1]
-		noise_array  = noise * np.random.randn(*render_array.shape)
-		text_array   = (render_array + noise_array).flatten()
+			# Applying additive Gaussian noise
+			render_array = np.array(render) / 255 # Normalise to r \in [0, 1]
+			noise_array  = noise * np.random.randn(*render_array.shape)
+			text_array   = (render_array + noise_array).flatten()
 
 		return text_array
 	
@@ -482,7 +535,7 @@ class OrthopeEstimator():
 			# the result will be approximate, but handles characters that overlap on the x axis
 
 			# get arrays for each character
-			char_arrs = [self.__crop_to_content__(self.__render_text__(L, is_prior=is_prior, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom).reshape(self.array_dims))[0] for L in word]
+			char_arrs = [self.__crop_to_content__(self.__render_text__(L, is_prior=is_prior, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom).reshape(self.full_array_dims))[0] for L in word]
 
 			# for each character, get the location in the image
 
@@ -621,7 +674,7 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
-	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=2, pad_top=1, pad_bottom=1, data_label=None):
+	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=8, pad_top=4, pad_bottom=4, data_label=None):
 		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
 
 		# separate opespath if using the optimal transport estimator
@@ -667,13 +720,13 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		weights /= np.sum(weights)
 
 		# print('Estimating word-level barycentre...')
-		# dd_3d = dd.reshape([-1, self.array_dims[0], self.array_dims[1]])  # reshape to 3d array of word * x * y
+		# dd_3d = dd.reshape([-1, self.full_array_dims[0], self.full_array_dims[1]])  # reshape to 3d array of word * x * y
 		# bc = otfuns.get_w_barycentre(dd_3d, debias=False, weights=weights, reg=0.0005, numItermax=int(1e7))
 
 		# del dd_3d
 
 		print('Getting letters and weights for each slot...')
-		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.array_dims), word=w_i, is_prior=True) for dd_i, w_i in zip(dd, self.corpus_df['word'])]
+		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.full_array_dims), word=w_i, is_prior=True) for dd_i, w_i in zip(dd, self.corpus_df['word'])]
 
 		del dd
 
@@ -743,7 +796,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 	def __estimate_ope__(self, word, estimate):
 
 		x = self.__render_text__(word, noise=self.noise)
-		x_2d = x.reshape(self.array_dims)
+		x_2d = x.reshape(self.full_array_dims)
 		
 		if '_wd' in estimate or '_gwd' in estimate:
 			x_letts = self.__split_word_img_letters__(x_2d, word=word, is_prior=False)
@@ -790,11 +843,339 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		return opes_df
 	
+# class WithinLetterOrthopeEstimator(OrthopeEstimator):
+# 	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=2, pad_top=1, pad_bottom=1, data_label=None):
+# 		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
+
+# 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for WithinLetterOrthopeEstimator()'
+
+# 	def __calculate_canvas_dims__(self, input_words=None, pad_w_per_char=None, pad_top=None, pad_bottom=None):
+# 		# for this class, the canvas dimensions are only ever one character in width
+# 		if not hasattr(self, 'corpus_df'):
+# 			self.__get_corpus__()
+
+# 		if pad_w_per_char is None:
+# 			pad_w_per_char = self.pad_w_per_char
+
+# 		if pad_top is None:
+# 			pad_top = self.pad_top
+		
+# 		if pad_bottom is None:
+# 			pad_bottom = self.pad_bottom
+
+# 		if input_words is None:
+# 			input_words = self.input_words
+
+# 		unique_fonts = set([self.font, self.prior_font])
+
+# 		# get max width and height for the input and corpus letters
+# 		input_letters = [l for ls in [list(w) for w in input_words] for l in ls]
+# 		corpus_letters = [l for ls in [list(w) for w in self.corpus_df.word] for l in ls]
+# 		test_letters = set([*input_letters, *corpus_letters])
+
+# 		pad_w = int(np.ceil(pad_w_per_char))
+# 		bbox_pad = np.array([-np.ceil(pad_w/2), -np.ceil(pad_top), np.ceil(pad_w/2), np.ceil(pad_bottom)]).astype(int)	
+		
+# 		font_bboxes_f = []
+# 		for f_id in unique_fonts:
+# 			font = ImageFont.truetype(self.font_dict[f_id], self.font_size)
+# 			bboxes = [font.getbbox(L, anchor='ms') for L in test_letters]
+# 			xmin, ymin = np.array(bboxes)[:, :2].min(axis=0)
+# 			xmax, ymax = np.array(bboxes)[:, 2:].max(axis=0)
+
+# 			font_bboxes_f.append( np.array([xmin, ymin, xmax, ymax]) + bbox_pad )
+		
+# 		font_bboxes_f = np.array(font_bboxes_f)
+
+# 		# warn if the dimensions mismatch
+# 		if np.unique(font_bboxes_f, axis=0).shape[0] > 1:
+# 			warnings.warn('Mismatch between dimensions of input font and prior font - will not make any attempt to align the fonts, and will use max extents!')
+# 			font_bboxes_f = np.array([font_bboxes_f[:, :2].min(axis=0),
+# 							   		  font_bboxes_f[:, 2:].max(axis=0)]).flatten()
+# 		else:
+# 			font_bboxes_f = font_bboxes_f.flatten()
+
+# 		# store in self
+# 		self.text_bbox   = list(font_bboxes_f)
+# 		self.canvas_dims = [sum([abs(self.text_bbox[i]) for i in [0, 2]]),
+# 					  		sum([abs(self.text_bbox[i]) for i in [1, 3]])]
+# 		self.array_dims  = (self.canvas_dims[1], self.canvas_dims[0])
+
+# 		return None
+
+# 	def __render_corpora__(self):
+# 		if not hasattr(self, 'corpus_df'):
+# 			self.__get_corpus__()
+
+# 		# for each slot, render all letters that occur in that slot
+# 		words_letts = [list(w) for w in self.corpus_df.word]
+
+# 		# (currently assumes that all words have the same length)
+# 		slot_letts_unique = [np.unique([wl[i] for wl in words_letts],
+# 								 return_inverse=True, return_counts=True)
+# 								 for i in range(self.n_letters[1])]
+		
+# 		slot_letts        = [slu[0] for slu in slot_letts_unique]
+# 		slot_letts_idx    = [slu[1] for slu in slot_letts_unique]  # for each word, the corresponding letter index for each slot
+# 		slot_letts_counts = [slu[2] for slu in slot_letts_unique]
+
+# 		# Computing corpus at pixel space assuming identical obs_noise
+# 		dd = [np.array(
+# 			[self.__render_text__(sl, is_prior=True, noise=self.noise) for sl in slot_letts_i]
+# 			) for slot_letts_i in slot_letts]
+# 		lett_weights = slot_letts_counts
+
+# 		fpmw = self.corpus_df['fpmw'].to_numpy()
+
+# 		# weight the letter counts by corresponding word frequencies
+# 		word_weights = [np.array(
+# 			[np.sum(slc[i] * fpmw[sli == i]) for i in range(len(slc))]
+# 			) for slc, sli in zip(slot_letts_counts, slot_letts_idx)]
+
+# 		return dd, word_weights, lett_weights
+	
+# 	def estimate_corpus_stats(self, weight_by_freq=None, max_iter=1000):
+# 		if weight_by_freq is None:
+# 			weight_by_freq = self.freq_weight
+
+# 		fit_done = False
+# 		iter_i = 0
+# 		while not fit_done:
+# 			iter_i += 1
+
+# 			# print('Rendering corpus...')
+# 			dd, word_weights, lett_weights = self.__render_corpora__()
+
+# 			# if weight_by_freq, then the weights will be frequency-weighted...
+# 			if weight_by_freq:
+# 				weights = [w / np.sum(w) for w in word_weights]
+# 			# ...otherwise, use the letter counts (comparable to the other classes)
+# 			else:
+# 				weights = [w / np.sum(w) for w in lett_weights]
+
+# 			# Estimating stats
+# 			# print('Estimating per-letter mu and sigma...')
+# 			mu    = [np.average(dd_i, axis=0, weights=w_i) for dd_i, w_i in zip(dd, weights)]
+# 			sigma = [np.cov(dd_i, rowvar=False, aweights=w_i) for dd_i, w_i in zip(dd, weights)]
+
+# 			# Precision matrix: exact and assuming independent distributions
+# 			# print('Estimating per-letter precision matrices...')
+# 			pi = []
+# 			pi_failed = False
+# 			if self.noise == 0.0:
+# 				warnings.warn('Setting precision matrices to np.inf, as noise==0')
+# 				for i in range(len(dd)):
+# 					pi_i = np.zeros(sigma[i].shape)
+# 					pi_i[:] = np.inf
+# 					pi.append(pi_i)
+# 			else:
+# 				for i, sigma_i in enumerate(sigma):
+# 					if not pi_failed or iter_i == max_iter:
+# 						try:
+# 							pi_i = scipy.linalg.pinvh(sigma_i)
+# 							# print(f'Fit letter {i+1}')
+# 						except np.linalg.LinAlgError as e:
+# 							# print(f'LinAlgError at letter {i+1}: {e}')
+# 							pi_failed = True
+# 							pi_i = np.zeros(sigma_i.shape)
+# 							pi_i[:] = np.nan
+						
+# 						pi.append(pi_i)
+
+# 			if pi_failed and iter_i < max_iter:
+# 				continue
+
+# 			pi_id = [1 / (np.diag(sigma_i)) for sigma_i in sigma]
+
+# 			# concatenate the pi matrices (used to calculate the precision-weighted error)
+# 			pi_concat = self.__concatenate_2d_mats__(pi, missing_val=0.0)
+# 			pi_id_concat = np.hstack(pi_id)
+
+# 			# Kalman gain assuming same obs_noise in past and current experiences
+# 			# print('Estimating Kalman gain...')
+# 			kal = []
+# 			kal_failed = False
+# 			for sigma_i in sigma:
+# 				if not kal_failed or iter_i == max_iter:
+# 					obs_sigma_i = self.noise * np.identity(sigma_i.shape[0])
+# 					try:
+# 						kal_i = sigma_i @ np.linalg.pinv(sigma_i + obs_sigma_i)
+# 					except np.linalg.LinAlgError as e:
+# 						if iter_i == max_iter:
+# 							# print(f'LinAlgError at letter {i+1}: {e}')
+# 							kal_failed = True
+# 							kal_i = np.zeros(sigma_i.shape)
+# 							kal_i[:] = np.nan
+				
+# 				kal.append(kal_i)
+
+# 			if kal_failed and iter_i < max_iter:
+# 				continue
+
+# 			if iter_i < max_iter:
+# 				print(f'Fit all corpus stats after {iter_i} attempts at rendering')
+# 			else:
+# 				print(f'Failed to fit all corpus stats after {iter_i} attempts at rendering')
+
+# 			fit_done = True
+
+# 		self.corpus_stats = {'mu':           mu, 
+# 							 'sigma':        sigma,
+# 							 'pi':           pi,
+# 							 'pi_concat':    pi_concat,
+# 							 'pi_id':        pi_id,
+# 							 'pi_id_concat': pi_id_concat,
+# 							 'kal':          kal}
+
+# 		return None
+	
+# 	def __estimate_ope__(self, word, estimate):
+
+# 		x = [self.__render_text__(L, noise=self.noise) for L in list(word)]
+
+# 		if 'n_pixels_' not in estimate and '_wd' not in estimate and '_gwd' not in estimate:
+# 			e = [x_i - mu_i for x_i, mu_i in zip(x, self.corpus_stats['mu'])]
+
+# 		match estimate:
+# 			case 'n_pixels_l1':
+# 				ope = abs(np.hstack(x)).sum()
+# 			case 'n_pixels_l2':
+# 				ope = np.linalg.norm(np.hstack(x))
+# 			case 'pred_err_l1':
+# 				ope = abs(np.hstack(e)).sum()
+# 			case 'pred_err_l2':
+# 				ope = np.linalg.norm(np.hstack(e))
+# 			case 'pw_pred_err':
+# 				ope = np.sum([np.linalg.norm(e_i * pi_id_i)
+# 				  for e_i, pi_id_i in zip(e, self.corpus_stats['pi_id'])])
+# 			case 'pred_err_wd':
+# 				if self.font == 'word' or self.noise!=0.0:
+# 					ope = np.nan
+# 				else:
+# 					ope = np.sum([otfuns.get_w(
+# 						s = x_i.reshape(self.array_dims),
+# 						t = mu_i.reshape(self.array_dims))
+# 						for x_i, mu_i in zip(x, self.corpus_stats['mu'])])
+# 			case 'pred_err_gwd':
+# 				if self.font == 'word' or self.noise!=0.0:
+# 					ope = np.nan
+# 				else:
+# 					ope = np.sum([otfuns.get_gw(
+# 						s = x_i.reshape(self.array_dims),
+# 						t = mu_i.reshape(self.array_dims))
+# 						for x_i, mu_i in zip(x, self.corpus_stats['mu'])])
+# 			case 'mahalanobis':
+# 				# if any([np.all(np.isnan(pi_i)) for pi_i in self.corpus_stats['pi']]):
+# 				# 	ope = np.nan
+# 				# else:
+# 				# 	e_concat = np.hstack(e)
+# 				# 	ope = (e_concat @ self.corpus_stats['pi_concat'] @ e_concat.T)**.5
+# 				warnings.warn('mahalanobis not supported for within-letter class')
+# 				ope = np.nan
+# 			case 'kalmanw_pred_err':
+# 				warnings.warn('Kalman-weighted prediction error is only approximated by summing within-letter errors')
+# 				if any([np.all(np.isnan(kal_i)) for kal_i in self.corpus_stats['kal']]):
+# 					ope = np.nan
+# 				else:
+# 					ope = np.sum([np.linalg.norm(kal_i @ e_i) for kal_i, e_i in zip(self.corpus_stats['kal'], e)])
+
+# 		return ope
+	
+# 	def __plot_2d_from_flat__(self, x_1d, cmap='binary', log_trans=False, **kwargs):
+# 		if log_trans:
+# 			x_1d = [np.log(x_1d_i) for x_1d_i in x_1d]
+
+# 		x_2d = np.hstack([x_1d_i.reshape(self.array_dims) for x_1d_i in x_1d])
+# 		fig, ax = plt.subplots()
+# 		im = ax.imshow(x_2d, interpolation='none', cmap=cmap, **kwargs)
+# 		divider = make_axes_locatable(ax)
+# 		cax = divider.append_axes('right', size='2.5%', pad=0.1)
+# 		fig.colorbar(im, cax=cax, orientation='vertical')
+# 		return fig, ax
+	
+# 	def __plot_4dstat__(self, stat, log_trans=False):
+# 		if not hasattr(self, 'corpus_stats') or stat not in self.corpus_stats:
+# 			print(f'{stat} not (yet) estimated via estimate_corpus_stats')
+# 		else:
+# 			assert np.unique([np.shape(stat_i) for stat_i in self.corpus_stats[stat]], axis=0).shape[0] == 1, 'Expected all letters\' stats to have the same size and dimensions'
+
+# 			stat_2d = np.zeros((np.array(self.corpus_stats[stat][0].shape) * len(self.corpus_stats[stat])))
+# 			stat_2d[:] = np.nan
+
+# 			stat_mean = np.zeros((self.array_dims[0], (self.array_dims[1]*len(self.corpus_stats[stat])) ))
+# 			stat_sd   = np.zeros((self.array_dims[0], (self.array_dims[1]*len(self.corpus_stats[stat])) ))
+
+# 			for i, stat_i in enumerate(self.corpus_stats[stat]):
+# 				if log_trans:
+# 					stat_i = np.log(stat_i)
+
+# 				xmin = self.corpus_stats[stat][0].shape[1] * i
+# 				xmax = self.corpus_stats[stat][0].shape[1] * (i+1)
+# 				ymin = self.corpus_stats[stat][0].shape[0] * i
+# 				ymax = self.corpus_stats[stat][0].shape[0] * (i+1)
+# 				stat_2d[ymin:ymax, xmin:xmax] = stat_i
+
+# 				xmin_render = self.array_dims[1] * i
+# 				xmax_render = self.array_dims[1] * (i+1)
+# 				stat_mean[:, xmin_render:xmax_render] = np.nanmean(np.ma.masked_invalid(stat_i), axis=1).reshape(self.array_dims)
+# 				stat_sd[:, xmin_render:xmax_render]   = np.nanstd(np.ma.masked_invalid(stat_i), axis=1).reshape(self.array_dims)
+
+# 			stat_lab = f'log {stat}' if log_trans else stat
+
+# 			fig, axs = plt.subplots(ncols=2, nrows=2)
+# 			gs = axs[0, 0].get_gridspec()
+
+# 			for ax in axs[:2, 0]:
+# 				ax.remove()
+
+# 			axbig = fig.add_subplot(gs[:2, 0])
+# 			axbig.set_title(f'Full {stat_lab} Matrix')
+# 			im1 = axbig.imshow(stat_2d, interpolation='none')
+# 			divider1 = make_axes_locatable(axbig)
+# 			cax1 = divider1.append_axes('right', size='2.5%', pad=0.1)
+# 			fig.colorbar(im1, cax=cax1, orientation='vertical')
+
+# 			axs[0, 1].set_title(f'Mean of {stat_lab} (Pixel Space)')
+# 			im2 = axs[0, 1].imshow(stat_mean, interpolation='none')
+# 			divider2 = make_axes_locatable(axs[0, 1])
+# 			cax2 = divider2.append_axes('right', size='2.5%', pad=0.1)
+# 			fig.colorbar(im2, cax=cax2, orientation='vertical')
+
+# 			axs[1, 1].set_title(f'SD of {stat_lab} (Pixel Space)')
+# 			im3 = axs[1, 1].imshow(stat_sd, interpolation='none')
+# 			divider3 = make_axes_locatable(axs[1, 1])
+# 			cax3 = divider3.append_axes('right', size='2.5%', pad=0.1)
+# 			fig.colorbar(im3, cax=cax3, orientation='vertical')
+
+# 			fig.tight_layout()
+
+# 			return fig, ax
+		
+# 	def __concatenate_2d_mats__(self, mat_list, missing_val=np.nan):
+# 		# concatenates a list of matrices, each representing one letter in the whole word matrix, into one big matrix (useful when concatenating)
+# 		mat_dims = [mat_i.shape for mat_i in mat_list]
+# 		assert np.unique(mat_dims, axis=0).shape[0] == 1, 'Expected all matrices to have the same dimensions'
+# 		assert np.all(np.array([len(dim_i) for dim_i in mat_dims]) == 2), 'Expected all matrices to be 2D'
+# 		assert np.all(np.array([dim_i[0]==dim_i[1] for dim_i in mat_dims])), 'Expected all matrices to be square'
+
+# 		mat_concat = np.zeros((mat_list[0].shape[0]*len(mat_list), mat_list[1].shape[0]*len(mat_list)))
+# 		mat_concat[:, :] = missing_val
+
+# 		for i, mat_i in enumerate(mat_list):
+# 			xmin = mat_i.shape[1] * i
+# 			xmax = mat_i.shape[1] * (i+1)
+# 			ymin = mat_i.shape[0] * i
+# 			ymax = mat_i.shape[0] * (i+1)
+# 			mat_concat[ymin:ymax, xmin:xmax] = mat_i
+
+# 		return mat_concat
+
+	
 class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 	# this function is more efficient, but assumes earlier on that mass is only transported within letter slots
 
-	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
-		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
+	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=4, pad_bottom=4, data_label=None):
+		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, force_monospace=False, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
@@ -803,8 +1184,9 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for WithinLetterOptimalTransportOrthopeEstimator()'
 
-	def __calculate_canvas_dims__(self, input_words=None, pad_w_per_char=None, pad_top=None, pad_bottom=None):
+	def __calculate_canvas_dims__(self, input_words=None, force_monospace=None, pad_w_per_char=None, pad_top=None, pad_bottom=None):
 		# for this class, the canvas dimensions are only ever one character in width
+		# force_monospace is ignored for this class
 		if not hasattr(self, 'corpus_df'):
 			self.__get_corpus__()
 
@@ -854,6 +1236,8 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		self.canvas_dims = [sum([abs(self.text_bbox[i]) for i in [0, 2]]),
 					  		sum([abs(self.text_bbox[i]) for i in [1, 3]])]
 		self.array_dims  = (self.canvas_dims[1], self.canvas_dims[0])
+		self.full_canvas_dims = self.canvas_dims
+		self.full_array_dims  = self.array_dims
 
 		return None
 
@@ -917,7 +1301,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		
 		print('Rendering corpus...')
 		dd, word_weights, lett_weights = self.__render_corpora__()
-		dd_2d = [[dd_ij.reshape(self.array_dims) for dd_ij in dd_i] for dd_i in dd]
+		dd_2d = [[dd_ij.reshape(self.full_array_dims) for dd_ij in dd_i] for dd_i in dd]
 
 		# if weight_by_freq, then the weights will be frequency-weighted...
 		if weight_by_freq:
@@ -954,7 +1338,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 	def __estimate_ope__(self, word, estimate):
 
 		x = [self.__render_text__(L, noise=self.noise) for L in list(word)]
-		x_2d = [x_i.reshape(self.array_dims) for x_i in x]
+		x_2d = [x_i.reshape(self.full_array_dims) for x_i in x]
 
 		e = [x_2d_i - bc_i for x_2d_i, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
 
@@ -976,144 +1360,121 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 					ope_L = [otfuns.get_gw(s = L, t = bc_i) for L, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
 					ope = np.sum(ope_L)
 		return ope
-	
-	def load_opes(self, input_words=None):
 
-		if input_words is None:
-			input_words = self.input_words
+# class ImageOrthopeEstimator(OrthopeEstimator):
+# 	# this function is equivalent to OrthopeEstimator, but works on images
 
-		if os.path.exists(self.opespath):
-			print('Loading existing oPE file...')
-			opes_df = pd.read_csv(self.opespath)
-			# CSV interprets index info as an unnamed column
-			opes_df.rename(columns={'Unnamed: 0':'word'}, inplace=True)
+# 	# set image_prior=True to calculate the priors from the image corpus, using the images in the provided font - otherwise, will calculate the priors from prior_font
 
-			if len(opes_df.word.unique()) != set(input_words).issubset(opes_df.word.unique()):
-				warnings.warn(f'Loaded oPE file, but mismatch in words!')
-		else:
-			print(f'Calculating optimal transport oPE for {len(input_words)} inputs...')
-			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
-			opes_df = self.__create_opes_df__(words=input_words)
+# 	# set input_words=None to use all images in the images directory for the given language as input
 
-		return opes_df
-	
+# 	def __init__(self, language, font, noise, input_words=None, prior_font=None, image_prior=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
+# 		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
 
-class ImageOrthopeEstimator(OrthopeEstimator):
-	# this function is equivalent to OrthopeEstimator, but works on images
+# 		self.image_prior = image_prior
+# 		self.font_size	  = 40  # based on expected height of images (used as a starting place, as we resize any rendered text so that the cropped content matches the dimensions of the images anyway)
 
-	# set image_prior=True to calculate the priors from the image corpus, using the images in the provided font - otherwise, will calculate the priors from prior_font
+# 		# lookup for the ID in the image file paths associated with each of the possible fonts in the images (for when image_prior==True)
+# 		self.im_font_dict = {'courier'        : 'courier new',
+# 							 'liberationserif': 'liberation serif',
+# 							 'liberationmono' : 'liberation mono',
+# 							 'comic'          : 'comic sans ms'}
 
-	# set input_words=None to use all images in the images directory for the given language as input
+# 		# if not input files provided, use all in the language's image directory
+# 		if self.input_words is None:
+# 			self.input_words = glob.glob(os.path.join('data_repository', 'images', self.language, '*.png'))
 
-	def __init__(self, language, font, noise, input_words=None, prior_font=None, image_prior=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
-		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
+# 		# check that the input_words are file paths
+# 		filepaths_exist = [os.path.isfile(fp) for fp in self.input_words]
+# 		assert all(filepaths_exist), 'Not all input_words exist as file paths'
 
-		self.image_prior = image_prior
-		self.font_size	  = 40  # based on expected height of images (used as a starting place, as we resize any rendered text so that the cropped content matches the dimensions of the images anyway)
+# 	def __calculate_prior_font_lims__(self, input_words=None, pad_w_per_char=8, pad_h=0):
+# 		if self.image_prior:
+# 			raise ValueError('Tried to calculate dimensions of prior font, but image_prior==True')
+# 		else:
+# 			if not hasattr(self, 'corpus_df'):
+# 				self.__get_corpus__()
 
-		# lookup for the ID in the image file paths associated with each of the possible fonts in the images (for when image_prior==True)
-		self.im_font_dict = {'courier'        : 'courier new',
-							 'liberationserif': 'liberation serif',
-							 'liberationmono' : 'liberation mono',
-							 'comic'          : 'comic sans ms'}
-
-		# if not input files provided, use all in the language's image directory
-		if self.input_words is None:
-			self.input_words = glob.glob(os.path.join('data_repository', 'images', self.language, '*.png'))
-
-		# check that the input_words are file paths
-		filepaths_exist = [os.path.isfile(fp) for fp in self.input_words]
-		assert all(filepaths_exist), 'Not all input_words exist as file paths'
-
-	def __calculate_prior_font_lims__(self, input_words=None, pad_w_per_char=8, pad_h=0):
-		if self.image_prior:
-			raise ValueError('Tried to calculate dimensions of prior font, but image_prior==True')
-		else:
-			if not hasattr(self, 'corpus_df'):
-				self.__get_corpus__()
-
-			if input_words is None:
-				input_words = self.input_words
+# 			if input_words is None:
+# 				input_words = self.input_words
 			
-			font = ImageFont.truetype(self.font_dict[self.prior_font], self.font_size)
+# 			font = ImageFont.truetype(self.font_dict[self.prior_font], self.font_size)
 
-			# get max width and height for the input and corpus words
-			test_words = set([*input_words, *self.corpus_df['word']])
-			pad_w = int(max([len(w) for w in test_words]) * pad_w_per_char)
-			font_dims = np.max([font.getbbox(w, anchor='lt')[2:] for w in test_words], axis=0) + np.array([pad_w, pad_h])
+# 			# get max width and height for the input and corpus words
+# 			test_words = set([*input_words, *self.corpus_df['word']])
+# 			pad_w = int(max([len(w) for w in test_words]) * pad_w_per_char)
+# 			font_dims = np.max([font.getbbox(w, anchor='lt')[2:] for w in test_words], axis=0) + np.array([pad_w, pad_h])
 
-			# store in self
-			self.prior_font_canvas_dims = list(font_dims)
-			self.prior_font_array_dims = (font_dims[1], font_dims[0])
+# 			# store in self
+# 			self.prior_font_canvas_dims = list(font_dims)
+# 			self.prior_font_array_dims = (font_dims[1], font_dims[0])
 
-		return None
+# 		return None
 
-	def __calculate_canvas_dims__(self, input_words=None):
-		if input_words is None:
-			input_words = self.input_words
+# 	def __calculate_canvas_dims__(self, input_words=None):
+# 		if input_words is None:
+# 			input_words = self.input_words
 
-		# get size(s) from the provided images
-		test_sizes = [Image.open(fp).convert('L').size for fp in input_words]
-		unique_sizes = np.unique(test_sizes, axis=0)
+# 		# get size(s) from the provided images
+# 		test_sizes = [Image.open(fp).convert('L').size for fp in input_words]
+# 		unique_sizes = np.unique(test_sizes, axis=0)
 
-		assert len(unique_sizes)==1, 'Inconsistent image sizes in input_words'
+# 		assert len(unique_sizes)==1, 'Inconsistent image sizes in input_words'
 
-		unique_sizes = unique_sizes.flatten()
+# 		unique_sizes = unique_sizes.flatten()
 
-		# store in self
-		self.canvas_dims = list(unique_sizes)
-		self.array_dims = (unique_sizes[1], unique_sizes[0])
+# 		# store in self
+# 		self.canvas_dims = list(unique_sizes)
+# 		self.array_dims = (unique_sizes[1], unique_sizes[0])
 
-		return None
+# 		return None
 
-	def __render_text__(self, text, is_imagefile=False, noise=0.0, show=False):
+# 	def __render_text__(self, text, is_imagefile=False, noise=0.0, show=False):
 
-		if is_imagefile:
-			# load existing image with pillow
-			render = Image.open(text).convert('L')
-			# first, check that the average is >0.5, which should be the case if black on white background
-			render_avg = np.mean(render)/255
-			if render_avg < 0.5:
-				warnings.warn('Expected image files to be black text on white background, but average pixel value is <0.5')
-			# invert, because all the images should be black on white, and the analysis assumes white on black background (i.e., pixels with non-zero values are the text)
-			render = ImageOps.invert(render)
-		else:
-			if os.path.isfile(text):
-				warnings.warn('passed file as text - did you mean to set is_imagefile=True ?')
+# 		if is_imagefile:
+# 			# load existing image with pillow
+# 			render = Image.open(text).convert('L')
+# 			# first, check that the average is >0.5, which should be the case if black on white background
+# 			render_avg = np.mean(render)/255
+# 			if render_avg < 0.5:
+# 				warnings.warn('Expected image files to be black text on white background, but average pixel value is <0.5')
+# 			# invert, because all the images should be black on white, and the analysis assumes white on black background (i.e., pixels with non-zero values are the text)
+# 			render = ImageOps.invert(render)
+# 		else:
+# 			if os.path.isfile(text):
+# 				warnings.warn('passed file as text - did you mean to set is_imagefile=True ?')
 
-			if not hasattr(self, 'canvas_dims'):
-				self.__calculate_canvas_dims__()
+# 			if not hasattr(self, 'canvas_dims'):
+# 				self.__calculate_canvas_dims__()
 
-			if not hasattr(self, 'prior_font_canvas_dims'):
-				self.__calculate_prior_font_lims__()
+# 			if not hasattr(self, 'prior_font_canvas_dims'):
+# 				self.__calculate_prior_font_lims__()
 
-			# set up font		
-			font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+# 			# set up font		
+# 			font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
 
-			# Rendering text with pillow
-			render   = Image.new('L', self.canvas_dims, color=0)
-			draw     = ImageDraw.Draw(render)
-			text_pos = ((self.canvas_dims[0] - font.getlength(text))/2, -7)
-			draw.text(text_pos, text, fill=255, font=font)
-			if show: render.show();
+# 			# Rendering text with pillow
+# 			render   = Image.new('L', self.canvas_dims, color=0)
+# 			draw     = ImageDraw.Draw(render)
+# 			text_pos = ((self.canvas_dims[0] - font.getlength(text))/2, -7)
+# 			draw.text(text_pos, text, fill=255, font=font)
+# 			if show: render.show();
 
-			# crop the x axis to the limits
-			render_array = np.array(render)
-			nonzero_idx = np.where(render_array!=0.0)
-			cr_x = slice(np.min(nonzero_idx[1]), np.max(nonzero_idx[1])+1)
-			render_array_cr = render_array[:, cr_x]
-			# and now resize the image to match the expected image dimensions
-			render = Image.fromarray(render_array_cr)
-			render = render.resize(self.canvas_dims)
+# 			# crop the x axis to the limits
+# 			render_array = np.array(render)
+# 			nonzero_idx = np.where(render_array!=0.0)
+# 			cr_x = slice(np.min(nonzero_idx[1]), np.max(nonzero_idx[1])+1)
+# 			render_array_cr = render_array[:, cr_x]
+# 			# and now resize the image to match the expected image dimensions
+# 			render = Image.fromarray(render_array_cr)
+# 			render = render.resize(self.canvas_dims)
 
-		# Applying additive Gaussian noise
-		render_array = np.array(render) / 255 # Normalise to r \in [0, 1]
-		noise_array  = noise * np.random.randn(*render_array.shape)
-		text_array   = (render_array + noise_array).flatten()
+# 		# Applying additive Gaussian noise
+# 		render_array = np.array(render) / 255 # Normalise to r \in [0, 1]
+# 		noise_array  = noise * np.random.randn(*render_array.shape)
+# 		text_array   = (render_array + noise_array).flatten()
 
-		return text_array
-
-
+# 		return text_array
 
 
 
@@ -1131,8 +1492,11 @@ def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None)
 	for noise in noises:
 		for freq_min in min_freq_percs:
 			for freq_weight in (True, False):
+
 				if font == 'word':
 					gg = LetterOrthopeEstimator(language=language, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+					gg.load_opes()
 				else:
-					gg = OrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
-				gg.load_opes()
+					for force_monospace in (True, False)
+						gg = OrthopeEstimator(language=language, font=font, noise=noise, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
+						gg.load_opes()
