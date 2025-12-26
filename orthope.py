@@ -674,8 +674,8 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
-	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=8, pad_top=4, pad_bottom=4, data_label=None):
-		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
+	def __init__(self, language, font, noise, input_words, font_size=32, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=8, pad_top=4, pad_bottom=4, data_label=None):
+		super().__init__(language, font=font, noise=noise, input_words=input_words, font_size=font_size, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
@@ -1174,8 +1174,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 	# this function is more efficient, but assumes earlier on that mass is only transported within letter slots
 
-	def __init__(self, language, font, noise, input_words, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=4, pad_bottom=4, data_label=None):
-		super().__init__(language, font=font, noise=noise, input_words=input_words, prior_font=prior_font, force_monospace=False, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
+	def __init__(self, language, font, noise, input_words, font_size=32, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=4, pad_bottom=4, data_label=None):
+		super().__init__(language, font=font, noise=noise, input_words=input_words, font_size=font_size, prior_font=prior_font, force_monospace=False, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
