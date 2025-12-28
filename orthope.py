@@ -672,7 +672,7 @@ class OrthopeEstimator():
 			# CSV interprets index info as an unnamed column
 			opes_df.rename(columns={'Unnamed: 0':'word'}, inplace=True)
 
-			if len(opes_df.word.unique()) != len(set(input_words)) or not set(input_words).issubset(opes_df.word.unique()):
+			if any([w_i not in set(input_words) for w_i in opes_df.word.unique()]) or any([w_i not in opes_df.word.unique() for w_i in set(input_words)]):
 				warnings.warn(f'Loaded oPE file, but mismatch in words!')
 		else:
 			print(f'Calculating oPE for {len(input_words)} inputs...')
@@ -867,7 +867,7 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 			# CSV interprets index info as an unnamed column
 			opes_df.rename(columns={'Unnamed: 0':'word'}, inplace=True)
 
-			if len(opes_df.word.unique()) != set(input_words).issubset(opes_df.word.unique()):
+			if any([w_i not in set(input_words) for w_i in opes_df.word.unique()]) or any([w_i not in opes_df.word.unique() for w_i in set(input_words)]):
 				warnings.warn(f'Loaded oPE file, but mismatch in words!')
 		else:
 			print(f'Calculating optimal transport oPE for {len(input_words)} inputs...')
