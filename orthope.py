@@ -60,7 +60,7 @@ def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2):
 
 class OrthopeEstimator():
 
-	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=32, prior_font=None, force_monospace=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None):
+	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, force_monospace=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None):
 		data_label_lab = '' if data_label is None else f'{data_label} '
 		freq_wt_lab = 'freq-weighted' if freq_weight else 'freq-unweighted'
 		print(f'{data_label_lab}{language}, font {font}, prior_font {prior_font}, monospace {force_monospace}, gauss_noise_sd {gauss_noise_sd}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
@@ -121,6 +121,12 @@ class OrthopeEstimator():
 						 'pred_err_wd',
 						#  'pred_err_gwd',
 						 'mahalanobis', 'kalmanw_pred_err']
+			
+		# estimates that have binarised prediction implemented
+		bin_pred_estimates = ['pred_err_l1', 'pred_err_l2', 'pw_pred_err',
+							  'mahalanobis', 'kalmanw_pred_err']
+		
+		bin_thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  # binary thresholds to test
 		
 		n_obs   = 100 if self.gauss_noise_sd > 0 else 1
 		opes_df = pd.DataFrame(index=words)
@@ -128,9 +134,15 @@ class OrthopeEstimator():
 		for est in estimates:
 			print(f'Computing estimates for {est}')
 			for word in tqdm(words):
-				opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
-				opes_df.at[word, est+'_mu']  = np.mean(opes)
-				opes_df.at[word, est+'_std'] = np.std(opes)
+				if est in bin_pred_estimates:
+					for thr in bin_thresholds:
+						opes = [self.__estimate_ope__(word, est, bin_threshold=thr) for _ in range(n_obs)]
+						opes_df.at[word, est+str(thr)+'_mu']  = np.mean(opes)
+						opes_df.at[word, est+str(thr)+'_std'] = np.std(opes)
+				else:
+					opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
+					opes_df.at[word, est+'_mu']  = np.mean(opes)
+					opes_df.at[word, est+'_std'] = np.std(opes)
 
 		if save:
 			opes_df.to_csv(self.opespath)
@@ -342,13 +354,18 @@ class OrthopeEstimator():
 			case 'kal':
 				self.__plot_4dstat__(stat)
 
-	def __estimate_ope__(self, word, estimate):
+	def __estimate_ope__(self, word, estimate, bin_threshold=None):
 
 		x = self.__render_text__(word, gauss_noise_sd=self.gauss_noise_sd)
 		# x_no_noise = self.__render_text__(word, gauss_noise_sd=0.0)
 
-		if 'n_pixels_' not in estimate and '_wd' not in estimate and '_gwd' not in estimate:
+		if 'n_pixels_' in estimate or '_wd' in estimate or '_gwd' in estimate:
+			if bin_threshold is not None:
+				raise ValueError(f'Don\'t know how to apply binary prediction threshold to {estimate}')
+		else:
 			e = x - self.corpus_stats['mu']
+			if bin_threshold is not None:
+				e = (e > bin_threshold).astype(e.dtype)
 
 		match estimate:
 			case 'n_pixels_l1':
@@ -361,7 +378,10 @@ class OrthopeEstimator():
 			case 'pred_err_l2':
 				ope = np.linalg.norm(e)
 			case 'pw_pred_err':
-				ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
+				if np.sum(e)==0.0:
+					ope = np.nan
+				else:
+					ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
 			case 'pred_err_wd':
 				if self.font == 'word' or self.gauss_noise_sd!=0.0:
 					ope = np.nan
@@ -380,7 +400,10 @@ class OrthopeEstimator():
 				if np.all(np.isnan(self.corpus_stats['pi'])):
 					ope = np.nan
 				else:
-					ope = (e @ self.corpus_stats['pi'] @ e.T)**.5
+					if np.sum(e)==0.0:
+						ope = np.nan
+					else:
+						ope = (e @ self.corpus_stats['pi'] @ e.T)**.5
 			case 'kalmanw_pred_err':
 				if np.all(np.isnan(self.corpus_stats['kal'])):
 					ope = np.nan
@@ -707,12 +730,12 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
-	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=32, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None):
+	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None):
 		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
-		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}__gaussnoisesd-{gauss_noise_sd}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes_ot'.replace('.','p')  # add "_ot" suffix
+		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}__gaussnoisesd-{gauss_noise_sd}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_mono-False_opes_ot'.replace('.','p')  # add "_ot" suffix
 		self.opespath = self.savepath / f'{opespath_prefix}.csv'
 
 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for OptimalTransportOrthopeEstimator()'
@@ -1207,12 +1230,12 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 	# this function is more efficient, but assumes earlier on that mass is only transported within letter slots
 
-	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=32, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None):
+	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None):
 		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, force_monospace=False, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
-		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}__gaussnoisesd-{gauss_noise_sd}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_opes_wlot'.replace('.','p')  # add "_wlot" suffix
+		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}__gaussnoisesd-{gauss_noise_sd}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_mono-True_opes_wlot'.replace('.','p')  # add "_wlot" suffix
 		self.opespath = self.savepath / f'{opespath_prefix}.csv'
 
 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for WithinLetterOptimalTransportOrthopeEstimator()'
@@ -1512,25 +1535,23 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 
 
-def run_all_oPEs(language, font, input_words, n_letters=(5, 5), data_label=None):
+def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None, data_label=None):
 
 	# Optimal Transport approach
 	if font != 'word':
 		for freq_min in min_freq_percs:
 			for freq_weight in (True, False):
-				# gg = OptimalTransportOrthopeEstimator(language=language, font=font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
-				gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+				gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
 				gg.load_opes()
 
 	# Euclidean approach
 	for gauss_noise_sd in gauss_noise_sds:
 		for freq_min in min_freq_percs:
 			for freq_weight in (True, False):
-
 				if font == 'word':
 					gg = LetterOrthopeEstimator(language=language, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
 					gg.load_opes()
 				else:
 					for force_monospace in (True, False):
-						gg = OrthopeEstimator(language=language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
+						gg = OrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
 						gg.load_opes()
