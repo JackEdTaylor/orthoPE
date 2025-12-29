@@ -1618,6 +1618,7 @@ def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None,
 			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_euc, *ggs_ot], desc=tqdm_desc))
 
 		else:
+			# Optimal Transport approach
 			for freq_min in min_freq_percs:
 				for freq_weight in (True, False):
 					gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
