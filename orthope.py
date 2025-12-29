@@ -61,7 +61,7 @@ def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2):
 
 class OrthopeEstimator():
 
-	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, force_monospace=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None):
+	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, force_monospace=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None, verbose=True):
 		if n_threads is not None:
 			# limit threads for this process, to make parallel-friendly
 			n_threads = str(n_threads)
@@ -73,7 +73,9 @@ class OrthopeEstimator():
 
 		data_label_lab = '' if data_label is None else f'{data_label} '
 		freq_wt_lab = 'freq-weighted' if freq_weight else 'freq-unweighted'
-		print(f'{data_label_lab}{language}, font {font}, prior_font {prior_font}, monospace {force_monospace}, gauss_noise_sd {gauss_noise_sd}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
+
+		if verbose:
+			print(f'{data_label_lab}{language}, font {font}, prior_font {prior_font}, monospace {force_monospace}, gauss_noise_sd {gauss_noise_sd}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
 
 		self.alphabet = string.ascii_letters + special + ' '
 
@@ -88,6 +90,7 @@ class OrthopeEstimator():
 		self.pad_w_per_char   = pad_w_per_char
 		self.pad_top          = pad_top
 		self.pad_bottom       = pad_bottom
+		self.verbose		  = verbose
 
 		# store subset info (two-unit lists/tuples of >= and <= cutoffs)
 		#  - if just one number is given, this will be used as both >= and <= cutoff
@@ -142,7 +145,8 @@ class OrthopeEstimator():
 		opes_df = pd.DataFrame(index=words)
 
 		for est in estimates:
-			print(f'Computing estimates for {est}')
+			if self.verbose:
+				print(f'Computing estimates for {est}')
 			for word in tqdm(words):
 				if est in bin_pred_estimates:
 					for thr in bin_thresholds:
@@ -178,14 +182,16 @@ class OrthopeEstimator():
 		is_missing_words = df.word.isna()
 		df = df.loc[~is_missing_words, ]
 		if any(is_missing_words):
-			print(f'Excluded {is_missing_words.sum()} missing words')
+			if self.verbose:
+				print(f'Excluded {is_missing_words.sum()} missing words')
 
 		# remove any non-alphabetic words
 		nonalph_regex = f'[^{"|".join(self.alphabet)}]'
 		is_nonalph = np.array([bool(re.search(nonalph_regex, w)) for w in df.word])
 		df = df.loc[~is_nonalph, ]
 		if any(is_nonalph):
-			print(f'Excluded {is_nonalph.sum()} non-alphabetic words')
+			if self.verbose:
+				print(f'Excluded {is_nonalph.sum()} non-alphabetic words')
 		
 		# apply filters
 		df = df.loc[[len(w)>=self.n_letters[0] and len(w)<=self.n_letters[1] for w in df.word]]
@@ -213,7 +219,8 @@ class OrthopeEstimator():
 		if weight_by_freq is None:
 			weight_by_freq = self.freq_weight
 
-		print('Rendering corpus and estimating stats...')
+		if self.verbose:
+			print('Rendering corpus and estimating stats...')
 		
 		fit_done = False
 		iter_i = 0
@@ -260,10 +267,11 @@ class OrthopeEstimator():
 				kal = np.zeros(sigma.shape)
 				kal[:] = np.nan
 
-			if iter_i < max_iter:
-				print(f'Fit all corpus stats after {iter_i} attempts at rendering')
-			else:
-				print(f'Failed to fit all corpus stats after {iter_i} attempts at rendering')
+			if self.verbose:
+				if iter_i < max_iter:
+					print(f'Fit all corpus stats after {iter_i} attempts at rendering')
+				else:
+					print(f'Failed to fit all corpus stats after {iter_i} attempts at rendering')
 
 			fit_done = True
 
@@ -700,7 +708,8 @@ class OrthopeEstimator():
 			input_words = self.input_words
 
 		if os.path.exists(self.opespath):
-			print('Loading existing oPE file...')
+			if self.verbose:
+				print('Loading existing oPE file...')
 			opes_df = pd.read_csv(self.opespath)
 			# CSV interprets index info as an unnamed column
 			opes_df.rename(columns={'Unnamed: 0':'word'}, inplace=True)
@@ -708,7 +717,8 @@ class OrthopeEstimator():
 			if any([w_i not in set(input_words) for w_i in opes_df.word.unique()]) or any([w_i not in opes_df.word.unique() for w_i in set(input_words)]):
 				warnings.warn(f'Loaded oPE file, but mismatch in words!')
 		else:
-			print(f'Calculating oPE for {len(input_words)} inputs...')
+			if self.verbose:
+				print(f'Calculating oPE for {len(input_words)} inputs...')
 			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
 			opes_df = self.__create_opes_df__(words=input_words)
 
@@ -717,8 +727,8 @@ class OrthopeEstimator():
 
 class LetterOrthopeEstimator(OrthopeEstimator):
 	
-	def __init__(self, language, gauss_noise_sd, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None):
-		super().__init__(language, font='word', gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label)
+	def __init__(self, language, gauss_noise_sd, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None, verbose=True):
+		super().__init__(language, font='word', gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label, verbose=verbose)
 
 	def __render_text__(self, text, is_prior=False, pad_w_per_char=None, pad_top=None, pad_bottom=None, gauss_noise_sd=0.0, show=False):
 		# note that is_prior and the pad_* arguments are ignored for LetterOrthopeEstimator
@@ -740,8 +750,8 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
-	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None):
-		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label, n_threads=n_threads)
+	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None, verbose=True):
+		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label, n_threads=n_threads, verbose=verbose)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
@@ -762,7 +772,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		opes_df = pd.DataFrame(index=words)
 
 		for est in estimates:
-			print(f'Computing estimates for {est}')
+			if self.verbose:
+				print(f'Computing estimates for {est}')
 			for word in tqdm(words):
 				opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
 				opes_df.at[word, est+'_mu']  = np.mean(opes)
@@ -777,7 +788,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		if weight_by_freq is None:
 			weight_by_freq = self.freq_weight
 		
-		print('Rendering corpus...')
+		if self.verbose:
+			print('Rendering corpus...')
 		dd, weights = self.__render_corpora__()
 
 		if not weight_by_freq:
@@ -791,7 +803,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		# del dd_3d
 
-		print('Getting letters and weights for each slot...')
+		if self.verbose:
+			print('Getting letters and weights for each slot...')
 		dd_spl = [self.__split_word_img_letters__(dd_i.reshape(self.full_array_dims), word=w_i, is_prior=True) for dd_i, w_i in zip(dd, self.corpus_df['word'])]
 
 		del dd
@@ -823,7 +836,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 			letts_weights.append( np.array([np.sum(weights[np.array(list(c)).astype(int)]) for c in components]) )
 			del lett_slot_vecs_i, cors_i, G, components
 
-		print(f'N unique letters per slot: {[len(L) for L in letts]}')
+		if self.verbose:
+			print(f'N unique letters per slot: {[len(L) for L in letts]}')
 		letts_weights = [w / w.sum() for w in letts_weights]
 
 		# crop the images of letters to reduce array size
@@ -831,7 +845,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		letts_cr = [cr_out_i[0] for cr_out_i in letts_cr_out]
 		letts_cr_pads = [cr_out_i[1][1:] for cr_out_i in letts_cr_out]  # pad widths for undoing the crops (ignore the first axis, as the barycentres will be 2d)
 
-		print('Estimating within-letter barycentres...')
+		if self.verbose:
+			print('Estimating within-letter barycentres...')
 		bcs_cr = [otfuns.get_w_barycentre(L, debias=False, weights=w, reg=0.0005, numItermax=int(1e7)) for L, w in zip(letts_cr, letts_weights)]
 
 		# now undo the crop to put the barycentres in the original coordinates
@@ -895,7 +910,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 			input_words = self.input_words
 
 		if os.path.exists(self.opespath):
-			print('Loading existing oPE file...')
+			if self.verbose:
+				print('Loading existing oPE file...')
 			opes_df = pd.read_csv(self.opespath)
 			# CSV interprets index info as an unnamed column
 			opes_df.rename(columns={'Unnamed: 0':'word'}, inplace=True)
@@ -903,7 +919,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 			if any([w_i not in set(input_words) for w_i in opes_df.word.unique()]) or any([w_i not in opes_df.word.unique() for w_i in set(input_words)]):
 				warnings.warn(f'Loaded oPE file, but mismatch in words!')
 		else:
-			print(f'Calculating optimal transport oPE for {len(input_words)} inputs...')
+			if self.verbose:
+				print(f'Calculating optimal transport oPE for {len(input_words)} inputs...')
 			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
 			opes_df = self.__create_opes_df__(words=input_words)
 
@@ -1240,8 +1257,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 	# this function is more efficient, but assumes earlier on that mass is only transported within letter slots
 
-	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None):
-		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, force_monospace=False, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label, n_threads=n_threads)
+	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None, verbose=True):
+		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, force_monospace=False, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label, n_threads=n_threads, verbose=verbose)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
@@ -1351,7 +1368,8 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		opes_df = pd.DataFrame(index=words)
 
 		for est in estimates:
-			print(f'Computing estimates for {est}')
+			if self.verbose:
+				print(f'Computing estimates for {est}')
 			for word in tqdm(words):
 				opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
 				opes_df.at[word, est+'_mu']  = np.mean(opes)
@@ -1366,7 +1384,8 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		if weight_by_freq is None:
 			weight_by_freq = self.freq_weight
 		
-		print('Rendering corpus...')
+		if self.verbose:
+			print('Rendering corpus...')
 		dd, word_weights, lett_weights = self.__render_corpora__()
 		dd_2d = [[dd_ij.reshape(self.full_array_dims) for dd_ij in dd_i] for dd_i in dd]
 
@@ -1377,7 +1396,8 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		else:
 			weights = [w / np.sum(w) for w in lett_weights]
 
-		print('Estimating within-letter barycentres...')
+		if self.verbose:
+			print('Estimating within-letter barycentres...')
 		bcs = [otfuns.get_w_barycentre(np.array(L), debias=False, weights=w, reg=0.001, numItermax=int(1e7)) for L, w in zip(dd_2d, weights)]
 
 		# join into a single image
@@ -1568,23 +1588,22 @@ def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None,
 
 			# Optimal Transport approach
 			ggs_ot = [
-				WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, n_threads=1)
+				WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, n_threads=1, verbose=False)
 				for freq_min in min_freq_percs
 				for freq_weight in (True, False)
 			]
 
-			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm(ggs_ot, desc=f'{tqdm_desc}: Optimal Transport Estimators'))
-
 			# Euclidean approach
 			ggs_euc = [
-				OrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace, n_threads=1)
+				OrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace, n_threads=1, verbose=False)
 				for gauss_noise_sd in gauss_noise_sds
 				for freq_min in min_freq_percs
 				for freq_weight in (True, False)
 				for force_monospace in (True, False)
 			]
 		
-			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm(ggs_euc, desc=f'{tqdm_desc}: Euclidean Estimators'))
+			# Estimate all in parallel
+			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_euc, *ggs_ot], desc={tqdm_desc}))
 
 		else:
 			for freq_min in min_freq_percs:
