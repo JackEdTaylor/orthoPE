@@ -147,7 +147,11 @@ class OrthopeEstimator():
 		for est in estimates:
 			if self.verbose:
 				print(f'Computing estimates for {est}')
-			for word in tqdm(words):
+				words_iterator = tqdm(words)
+			else:
+				words_iterator = words
+			
+			for word in words_iterator:
 				if est in bin_pred_estimates:
 					for thr in bin_thresholds:
 						opes = [self.__estimate_ope__(word, est, bin_threshold=thr) for _ in range(n_obs)]
@@ -774,7 +778,11 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 		for est in estimates:
 			if self.verbose:
 				print(f'Computing estimates for {est}')
-			for word in tqdm(words):
+				words_iterator = tqdm(words)
+			else:
+				words_iterator = words
+			
+			for word in words_iterator:
 				opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
 				opes_df.at[word, est+'_mu']  = np.mean(opes)
 				opes_df.at[word, est+'_std'] = np.std(opes)
@@ -1370,7 +1378,11 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		for est in estimates:
 			if self.verbose:
 				print(f'Computing estimates for {est}')
-			for word in tqdm(words):
+				words_iterator = tqdm(words)
+			else:
+				words_iterator = words
+			
+			for word in words_iterator:
 				opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
 				opes_df.at[word, est+'_mu']  = np.mean(opes)
 				opes_df.at[word, est+'_std'] = np.std(opes)
