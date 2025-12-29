@@ -1615,7 +1615,7 @@ def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None,
 			]
 		
 			# Estimate all in parallel
-			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_euc, *ggs_ot], desc=tqdm_desc))
+			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_ot, *ggs_euc], desc=tqdm_desc))
 
 		else:
 			# Optimal Transport approach
