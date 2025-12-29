@@ -1270,7 +1270,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
-		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}__gaussnoisesd-{gauss_noise_sd}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_mono-True_opes_wlot'.replace('.','p')  # add "_wlot" suffix
+		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}_gaussnoisesd-{gauss_noise_sd}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_mono-True_opes_wlot'.replace('.','p')  # add "_wlot" suffix
 		self.opespath = self.savepath / f'{opespath_prefix}.csv'
 
 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for WithinLetterOptimalTransportOrthopeEstimator()'
