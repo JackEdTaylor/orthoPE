@@ -14,6 +14,7 @@ import collections
 from itertools import groupby
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from tqdm import tqdm
+from joblib import Parallel, delayed
 import warnings
 
 import otfuns
@@ -60,7 +61,16 @@ def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2):
 
 class OrthopeEstimator():
 
-	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, force_monospace=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None):
+	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, force_monospace=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None):
+		if n_threads is not None:
+			# limit threads for this process, to make parallel-friendly
+			n_threads = str(n_threads)
+			os.environ["OMP_NUM_THREADS"] = n_threads
+			os.environ["OPENBLAS_NUM_THREADS"] = n_threads
+			os.environ["MKL_NUM_THREADS"] = n_threads
+			os.environ["VECLIB_MAXIMUM_THREADS"] = n_threads
+			os.environ["NUMEXPR_NUM_THREADS"] = n_threads
+
 		data_label_lab = '' if data_label is None else f'{data_label} '
 		freq_wt_lab = 'freq-weighted' if freq_weight else 'freq-unweighted'
 		print(f'{data_label_lab}{language}, font {font}, prior_font {prior_font}, monospace {force_monospace}, gauss_noise_sd {gauss_noise_sd}, letters {n_letters}, freq% {freq_perc}, {freq_wt_lab}')
@@ -730,8 +740,8 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 
-	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None):
-		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
+	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None):
+		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label, n_threads=n_threads)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
@@ -1230,8 +1240,8 @@ class OptimalTransportOrthopeEstimator(OrthopeEstimator):
 class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 	# this function is more efficient, but assumes earlier on that mass is only transported within letter slots
 
-	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None):
-		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, force_monospace=False, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label)
+	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None):
+		super().__init__(language, font=font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, font_size=font_size, prior_font=prior_font, force_monospace=False, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, data_label=data_label, n_threads=n_threads)
 
 		# separate opespath if using the optimal transport estimator
 		data_label = '' if data_label is None else f'{data_label}_'
@@ -1535,26 +1545,57 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 
 
-def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None, data_label=None):
+def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None, data_label=None, n_jobs=1):
 
 	# Letter-identity approach
 	if font=='word':
+		if n_jobs != 1:
+			warnings.warn('Parallelisation is not implemented for the letter-identity estimator')
+
 		for gauss_noise_sd in gauss_noise_sds:
 			for freq_min in min_freq_percs:
 				for freq_weight in (True, False):
 					gg = LetterOrthopeEstimator(language=language, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
 					gg.load_opes()
 	else:
-		# Optimal Transport approach
-		for freq_min in min_freq_percs:
-			for freq_weight in (True, False):
-				gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
-				gg.load_opes()
+		if n_jobs != 1:
+			# function that will be called in parallel
+			def do_load_opes(gg_i):
+				gg_i.load_opes()
+				return None
+			
+			tqdm_desc = f'{data_label} {language}, font {font}, prior_font {prior_font}, letters {n_letters}'
 
-		# Euclidean approach
-		for gauss_noise_sd in gauss_noise_sds:
+			# Optimal Transport approach
+			ggs_ot = [
+				WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, n_threads=1)
+				for freq_min in min_freq_percs
+				for freq_weight in (True, False)
+			]
+
+			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm(ggs_ot, desc=f'{tqdm_desc}: Optimal Transport Estimators'))
+
+			# Euclidean approach
+			ggs_euc = [
+				OrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace, n_threads=1)
+				for gauss_noise_sd in gauss_noise_sds
+				for freq_min in min_freq_percs
+				for freq_weight in (True, False)
+				for force_monospace in (True, False)
+			]
+		
+			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm(ggs_euc, desc=f'{tqdm_desc}: Euclidean Estimators'))
+
+		else:
 			for freq_min in min_freq_percs:
 				for freq_weight in (True, False):
-					for force_monospace in (True, False):
-						gg = OrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
-						gg.load_opes()
+					gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+					gg.load_opes()
+
+			# Euclidean approach
+			for gauss_noise_sd in gauss_noise_sds:
+				for freq_min in min_freq_percs:
+					for freq_weight in (True, False):
+						for force_monospace in (True, False):
+							gg = OrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
+							gg.load_opes()
