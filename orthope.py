@@ -1603,7 +1603,7 @@ def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None,
 			]
 		
 			# Estimate all in parallel
-			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_euc, *ggs_ot], desc={tqdm_desc}))
+			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_euc, *ggs_ot], desc=tqdm_desc))
 
 		else:
 			for freq_min in min_freq_percs:
