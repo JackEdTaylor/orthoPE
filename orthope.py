@@ -1537,21 +1537,24 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None, data_label=None):
 
-	# Optimal Transport approach
-	if font != 'word':
+	# Letter-identity approach
+	if font=='word':
+		for gauss_noise_sd in gauss_noise_sds:
+			for freq_min in min_freq_percs:
+				for freq_weight in (True, False):
+					gg = LetterOrthopeEstimator(language=language, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+					gg.load_opes()
+	else:
+		# Optimal Transport approach
 		for freq_min in min_freq_percs:
 			for freq_weight in (True, False):
 				gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
 				gg.load_opes()
 
-	# Euclidean approach
-	for gauss_noise_sd in gauss_noise_sds:
-		for freq_min in min_freq_percs:
-			for freq_weight in (True, False):
-				if font == 'word':
-					gg = LetterOrthopeEstimator(language=language, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
-					gg.load_opes()
-				else:
+		# Euclidean approach
+		for gauss_noise_sd in gauss_noise_sds:
+			for freq_min in min_freq_percs:
+				for freq_weight in (True, False):
 					for force_monospace in (True, False):
 						gg = OrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
 						gg.load_opes()
