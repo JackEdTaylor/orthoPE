@@ -11,6 +11,6 @@ dh = datahandlers.Gagl2020DataHandler(language=language)
 input_words = dh.get_unique_words()
 nletters_lims = dh.get_nletter_lims()
 
-orthope.run_all_oPEs(language=language, input_words=input_words, n_letters=nletters_lims, data_label='gagl2020')
+orthope.run_all_oPEs(language=language, input_words=input_words, n_letters=nletters_lims, data_label='gagl2020', n_jobs=n_jobs)
 
 print('done!')
