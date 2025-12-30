@@ -1,9 +1,5 @@
 import orthope
 import datahandlers
-import glob
-import pandas as pd
-import numpy as np
-import time
 
 n_jobs = -2  # use one fewer than max jobs
 
