@@ -25,6 +25,17 @@ min_freq_percs = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]  # 100%, top 90% freque
 
 special  = 'àâäæçéèêëîïôœùûüÿÀÂÄÆÇÉÈÊËÎÏÔŒÙÛÜŸëïöüĳËÏÖÜĲäöüßÄÖÜẞáéíóúñÁÉÍÓÚÑ'  # special characters to include as alphabetic (in addition to string.ascii_letters)
 
+fontpath = Path('fonts')
+
+font_dict   = {'courier'        : fontpath / 'couriernew.ttf',
+			   'courieri'       : fontpath / 'couriernewi.ttf',
+			   'cambria'        : fontpath / 'cambria.ttf',
+			   'verdana'        : fontpath / 'verdana.ttf',
+			   'cambriai'       : fontpath / 'cambriai.ttf',
+			   'liberationserif': fontpath / 'liberationserif.ttf',
+			   'liberationmono' : fontpath / 'liberationmono.ttf',
+			   'comic'          : fontpath / 'comic.ttf'}
+
 # self = OrthopeEstimator('german', 'courier', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
 # self = OrthopeEstimator('german', 'comic', prior_font='courier', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
 # self = OrthopeEstimator('german', 'verdana', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
@@ -106,18 +117,11 @@ class OrthopeEstimator():
 
 		self.datapath = Path('data_repository')
 		self.corppath = self.datapath / Path('corpora')
-		self.fontpath = Path('fonts')
+		self.fontpath = fontpath
 		self.savepath = Path('models')
 
 		# lookup dictionary for font paths
-		self.font_dict   = {'courier'        : self.fontpath / 'couriernew.ttf',
-							'courieri'       : self.fontpath / 'couriernewi.ttf',
-							'cambria'        : self.fontpath / 'cambria.ttf',
-							'verdana'        : self.fontpath / 'verdana.ttf',
-							'cambriai'       : self.fontpath / 'cambriai.ttf',
-							'liberationserif': self.fontpath / 'liberationserif.ttf',
-							'liberationmono' : self.fontpath / 'liberationmono.ttf',
-							'comic'          : self.fontpath / 'comic.ttf'}
+		self.font_dict = font_dict
 
 		data_label = '' if data_label is None else f'{data_label}_'
 		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}_gaussnoisesd-{gauss_noise_sd}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_mono-{force_monospace}_opes'.replace('.','p')
@@ -1577,10 +1581,10 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 
 
-def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None, data_label=None, n_jobs=1):
+def run_all_oPEs(language, input_words, n_letters=(5, 5), letter_identity=False, data_label=None, n_jobs=1):
 
 	# Letter-identity approach
-	if font=='word':
+	if letter_identity:
 		if n_jobs != 1:
 			warnings.warn('Parallelisation is not implemented for the letter-identity estimator')
 
@@ -1596,18 +1600,20 @@ def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None,
 				gg_i.load_opes()
 				return None
 			
-			tqdm_desc = f'{data_label} {language}, font {font}, prior_font {prior_font}, letters {n_letters}'
+			tqdm_desc = f'{data_label} {language}, letters {n_letters}'
 
 			# Optimal Transport approach
 			ggs_ot = [
-				WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, n_threads=1, verbose=False)
+				WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, n_threads=1, verbose=False)
+				for font in font_dict.keys()
 				for freq_min in min_freq_percs
 				for freq_weight in (True, False)
 			]
 
 			# Euclidean approach
 			ggs_euc = [
-				OrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace, n_threads=1, verbose=False)
+				OrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace, n_threads=1, verbose=False)
+				for font in font_dict.keys()
 				for gauss_noise_sd in gauss_noise_sds
 				for freq_min in min_freq_percs
 				for freq_weight in (True, False)
@@ -1619,15 +1625,17 @@ def run_all_oPEs(language, font, input_words, n_letters=(5, 5), prior_font=None,
 
 		else:
 			# Optimal Transport approach
-			for freq_min in min_freq_percs:
-				for freq_weight in (True, False):
-					gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
-					gg.load_opes()
-
-			# Euclidean approach
-			for gauss_noise_sd in gauss_noise_sds:
+			for font in font_dict.keys():
 				for freq_min in min_freq_percs:
 					for freq_weight in (True, False):
-						for force_monospace in (True, False):
-							gg = OrthopeEstimator(language=language, font=font, prior_font=prior_font, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
-							gg.load_opes()
+						gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+						gg.load_opes()
+
+			# Euclidean approach
+			for font in font_dict.keys():
+				for gauss_noise_sd in gauss_noise_sds:
+					for freq_min in min_freq_percs:
+						for freq_weight in (True, False):
+							for force_monospace in (True, False):
+								gg = OrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
+								gg.load_opes()
