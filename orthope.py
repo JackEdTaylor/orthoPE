@@ -710,7 +710,7 @@ class OrthopeEstimator():
 
 		return(x_crop, pad_width)
 
-	def load_opes(self, input_words=None):
+	def load_opes(self, input_words=None, save=True):
 
 		if input_words is None:
 			input_words = self.input_words
@@ -728,7 +728,7 @@ class OrthopeEstimator():
 			if self.verbose:
 				print(f'Calculating oPE for {len(input_words)} inputs...')
 			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
-			opes_df = self.__create_opes_df__(words=input_words)
+			opes_df = self.__create_opes_df__(words=input_words, save=save)
 
 		return opes_df
 
@@ -1581,13 +1581,16 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 
 
-def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_jobs=1):
+def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_jobs=1, save_at_each=True):
 	
 	if n_jobs != 1:
 		# function that will be called in parallel
 		def do_load_opes(gg_i):
-			gg_i.load_opes()
-			return None
+			df = gg_i.load_opes(save=save_at_each)
+			if save_at_each:
+				return None
+			else:
+				return df, gg_i.opespath
 		
 		tqdm_desc = f'{data_label} {language}, letters {n_letters}'
 
@@ -1618,7 +1621,12 @@ def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_job
 		]
 	
 		# Estimate all in parallel
-		_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_li, *ggs_ot, *ggs_euc], desc=tqdm_desc))
+		out = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_li, *ggs_ot, *ggs_euc], desc=tqdm_desc))
+
+		# save all at end if this is set
+		if not save_at_each:
+			for out_i in out:
+				out_i[0].to_csv(out_i[1])
 
 	else:
 		# Letter identity approach
