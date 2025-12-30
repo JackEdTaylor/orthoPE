@@ -1592,7 +1592,7 @@ def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_job
 		tqdm_desc = f'{data_label} {language}, letters {n_letters}'
 
 		# Letter identity approach
-		ggs_ot = [
+		ggs_li = [
 			LetterOrthopeEstimator(language=language, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, n_threads=1, verbose=False)
 			for gauss_noise_sd in gauss_noise_sds
 			for freq_min in min_freq_percs
@@ -1618,7 +1618,7 @@ def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_job
 		]
 	
 		# Estimate all in parallel
-		_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_ot, *ggs_euc], desc=tqdm_desc))
+		_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_li, *ggs_ot, *ggs_euc], desc=tqdm_desc))
 
 	else:
 		# Letter identity approach
