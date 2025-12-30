@@ -735,8 +735,8 @@ class OrthopeEstimator():
 
 class LetterOrthopeEstimator(OrthopeEstimator):
 	
-	def __init__(self, language, gauss_noise_sd, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None, verbose=True):
-		super().__init__(language, font='word', gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label, verbose=verbose)
+	def __init__(self, language, gauss_noise_sd, input_words, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, data_label=None, n_threads=None, verbose=True):
+		super().__init__(language, font='word', gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=freq_perc, freq_weight=freq_weight, data_label=data_label, n_threads=n_threads, verbose=verbose)
 
 	def __render_text__(self, text, is_prior=False, pad_w_per_char=None, pad_top=None, pad_bottom=None, gauss_noise_sd=0.0, show=False):
 		# note that is_prior and the pad_* arguments are ignored for LetterOrthopeEstimator
