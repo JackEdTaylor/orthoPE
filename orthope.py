@@ -1581,61 +1581,65 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 
 
-def run_all_oPEs(language, input_words, n_letters=(5, 5), letter_identity=False, data_label=None, n_jobs=1):
+def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_jobs=1):
+	
+	if n_jobs != 1:
+		# function that will be called in parallel
+		def do_load_opes(gg_i):
+			gg_i.load_opes()
+			return None
+		
+		tqdm_desc = f'{data_label} {language}, letters {n_letters}'
 
-	# Letter-identity approach
-	if letter_identity:
-		if n_jobs != 1:
-			warnings.warn('Parallelisation is not implemented for the letter-identity estimator')
+		# Letter identity approach
+		ggs_ot = [
+			LetterOrthopeEstimator(language=language, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, n_threads=1, verbose=False)
+			for gauss_noise_sd in gauss_noise_sds
+			for freq_min in min_freq_percs
+			for freq_weight in (True, False)
+		]
 
+		# Optimal Transport approach
+		ggs_ot = [
+			WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, n_threads=1, verbose=False)
+			for font in font_dict.keys()
+			for freq_min in min_freq_percs
+			for freq_weight in (True, False)
+		]
+
+		# Euclidean approach
+		ggs_euc = [
+			OrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace, n_threads=1, verbose=False)
+			for font in font_dict.keys()
+			for gauss_noise_sd in gauss_noise_sds
+			for freq_min in min_freq_percs
+			for freq_weight in (True, False)
+			for force_monospace in (True, False)
+		]
+	
+		# Estimate all in parallel
+		_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_ot, *ggs_euc], desc=tqdm_desc))
+
+	else:
+		# Letter identity approach
 		for gauss_noise_sd in gauss_noise_sds:
 			for freq_min in min_freq_percs:
 				for freq_weight in (True, False):
 					gg = LetterOrthopeEstimator(language=language, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
 					gg.load_opes()
-	else:
-		if n_jobs != 1:
-			# function that will be called in parallel
-			def do_load_opes(gg_i):
-				gg_i.load_opes()
-				return None
-			
-			tqdm_desc = f'{data_label} {language}, letters {n_letters}'
 
-			# Optimal Transport approach
-			ggs_ot = [
-				WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, n_threads=1, verbose=False)
-				for font in font_dict.keys()
-				for freq_min in min_freq_percs
-				for freq_weight in (True, False)
-			]
+		# Optimal Transport approach
+		for font in font_dict.keys():
+			for freq_min in min_freq_percs:
+				for freq_weight in (True, False):
+					gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
+					gg.load_opes()
 
-			# Euclidean approach
-			ggs_euc = [
-				OrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace, n_threads=1, verbose=False)
-				for font in font_dict.keys()
-				for gauss_noise_sd in gauss_noise_sds
-				for freq_min in min_freq_percs
-				for freq_weight in (True, False)
-				for force_monospace in (True, False)
-			]
-		
-			# Estimate all in parallel
-			_ = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_ot, *ggs_euc], desc=tqdm_desc))
-
-		else:
-			# Optimal Transport approach
-			for font in font_dict.keys():
+		# Euclidean approach
+		for font in font_dict.keys():
+			for gauss_noise_sd in gauss_noise_sds:
 				for freq_min in min_freq_percs:
 					for freq_weight in (True, False):
-						gg = WithinLetterOptimalTransportOrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=0.0, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight)
-						gg.load_opes()
-
-			# Euclidean approach
-			for font in font_dict.keys():
-				for gauss_noise_sd in gauss_noise_sds:
-					for freq_min in min_freq_percs:
-						for freq_weight in (True, False):
-							for force_monospace in (True, False):
-								gg = OrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
-								gg.load_opes()
+						for force_monospace in (True, False):
+							gg = OrthopeEstimator(language=language, font=font, prior_font=None, gauss_noise_sd=gauss_noise_sd, input_words=input_words, n_letters=n_letters, freq_perc=[freq_min, 100], data_label=data_label, freq_weight=freq_weight, force_monospace=force_monospace)
+							gg.load_opes()
