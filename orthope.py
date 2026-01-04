@@ -123,6 +123,10 @@ class OrthopeEstimator():
 		# lookup dictionary for font paths
 		self.font_dict = font_dict
 
+		if self.font != 'word':
+			self.imagefont = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+			self.imagepriorfont = ImageFont.truetype(self.font_dict[self.prior_font], self.font_size)
+
 		data_label = '' if data_label is None else f'{data_label}_'
 		opespath_prefix = f'{data_label}{language}_{font}_{prior_font}_gaussnoisesd-{gauss_noise_sd}_letters-{n_letters[0]}-{n_letters[1]}_freqperc-{freq_perc[0]}-{freq_perc[1]}_freqweight-{freq_weight}_mono-{force_monospace}_opes'.replace('.','p')
 		self.opespath = self.savepath / f'{opespath_prefix}.csv'
@@ -458,8 +462,6 @@ class OrthopeEstimator():
 			force_monospace = self.force_monospace
 
 		if force_monospace:
-			unique_fonts = set([self.font, self.prior_font])
-
 			# get max width and height for the input and corpus letters
 			input_letters = [l for ls in [list(w) for w in input_words] for l in ls]
 			corpus_letters = [l for ls in [list(w) for w in self.corpus_df.word] for l in ls]
@@ -469,8 +471,6 @@ class OrthopeEstimator():
 			bbox_pad = np.array([-np.ceil(pad_w/2), -np.ceil(pad_top), np.ceil(pad_w/2), np.ceil(pad_bottom)]).astype(int)
 
 		else:
-			unique_fonts = set([self.font, self.prior_font])
-
 			# get max width and height for the input and corpus words
 			test_text = set([*input_words, *self.corpus_df['word']])
 
@@ -478,8 +478,7 @@ class OrthopeEstimator():
 			bbox_pad = np.array([-np.ceil(pad_w/2), -np.ceil(pad_top), np.ceil(pad_w/2), np.ceil(pad_bottom)]).astype(int)
 
 		font_bboxes_f = []
-		for f_id in unique_fonts:
-			font = ImageFont.truetype(self.font_dict[f_id], self.font_size)
+		for font in [self.imagefont, self.imagepriorfont]:
 			bboxes = [font.getbbox(w, anchor='ms') for w in test_text]
 			xmin, ymin = np.array(bboxes)[:, :2].min(axis=0)
 			xmax, ymax = np.array(bboxes)[:, 2:].max(axis=0)
@@ -537,9 +536,9 @@ class OrthopeEstimator():
 		else:
 			# set up font
 			if is_prior:
-				font = ImageFont.truetype(self.font_dict[self.prior_font], self.font_size)
+				font = self.imagepriorfont
 			else:
-				font = ImageFont.truetype(self.font_dict[self.font], self.font_size)
+				font = self.imagefont
 
 			# Rendering text with pillow
 			render   = Image.new('L', self.canvas_dims, color=0)
@@ -710,12 +709,12 @@ class OrthopeEstimator():
 
 		return(x_crop, pad_width)
 
-	def load_opes(self, input_words=None, save=True):
+	def load_opes(self, input_words=None, save=True, load_existing=True):
 
 		if input_words is None:
 			input_words = self.input_words
 
-		if os.path.exists(self.opespath):
+		if load_existing and os.path.exists(self.opespath):
 			if self.verbose:
 				print('Loading existing oPE file...')
 			opes_df = pd.read_csv(self.opespath)
@@ -1297,8 +1296,6 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		if input_words is None:
 			input_words = self.input_words
 
-		unique_fonts = set([self.font, self.prior_font])
-
 		# get max width and height for the input and corpus letters
 		input_letters = [l for ls in [list(w) for w in input_words] for l in ls]
 		corpus_letters = [l for ls in [list(w) for w in self.corpus_df.word] for l in ls]
@@ -1308,8 +1305,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		bbox_pad = np.array([-np.ceil(pad_w/2), -np.ceil(pad_top), np.ceil(pad_w/2), np.ceil(pad_bottom)]).astype(int)	
 		
 		font_bboxes_f = []
-		for f_id in unique_fonts:
-			font = ImageFont.truetype(self.font_dict[f_id], self.font_size)
+		for font in [self.imagefont, self.imagepriorfont]:
 			bboxes = [font.getbbox(L, anchor='ms') for L in test_letters]
 			xmin, ymin = np.array(bboxes)[:, :2].min(axis=0)
 			xmax, ymax = np.array(bboxes)[:, 2:].max(axis=0)
@@ -1586,7 +1582,7 @@ def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_job
 	if n_jobs != 1:
 		# function that will be called in parallel
 		def do_load_opes(gg_i):
-			df = gg_i.load_opes(save=save_at_each)
+			df = gg_i.load_opes(save=save_at_each, load_existing=save_at_each)
 			if save_at_each:
 				return None
 			else:
@@ -1621,7 +1617,7 @@ def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_job
 		]
 	
 		# Estimate all in parallel
-		out = Parallel(n_jobs=n_jobs)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_li, *ggs_ot, *ggs_euc], desc=tqdm_desc))
+		out = Parallel(n_jobs=n_jobs, timeout=8**8)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_li, *ggs_ot, *ggs_euc], desc=tqdm_desc))
 
 		# save all at end if this is set
 		if not save_at_each:
