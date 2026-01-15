@@ -545,7 +545,6 @@ class OrthopeEstimator():
 			draw     = ImageDraw.Draw(render)
 			text_pos = (self.canvas_dims[0]/2, -self.text_bbox[1])
 			draw.text(text_pos, text, anchor='ms', fill=255, font=font)
-			if show: render.show();
 			render_array = np.array(render) / 255 # Normalise to r \in [0, 1]
 
 			# Applying "proportional drift" noise
@@ -562,6 +561,11 @@ class OrthopeEstimator():
 			# Applying additive Gaussian noise
 			noise_array  = gauss_noise_sd * np.random.randn(*render_array.shape)
 			text_array   = (render_array + noise_array).flatten()
+			
+			if show:
+				plt.figure()
+				plt.imshow(render_array + noise_array, cmap='gray', vmin=0.0, vmax=max([text_array.max(), 1.0]), interpolation='none')
+				plt.colorbar()
 
 		return text_array
 	
