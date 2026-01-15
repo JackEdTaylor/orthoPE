@@ -761,6 +761,9 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		assert self.font != 'word', 'LetterOrthopeEstimator() not implemented for WithinLetterOptimalTransportOrthopeEstimator()'
 
+		if self.gauss_noise_sd != 0.0:
+			warnings.warn('Additive Gaussian noise likely to cause problems for the optimal transport estimator')
+
 	def __calculate_canvas_dims__(self, input_words=None, force_monospace=None, pad_w_per_char=None, pad_top=None, pad_bottom=None):
 		# for this class, the canvas dimensions are only ever one character in width
 		# force_monospace is ignored for this class
