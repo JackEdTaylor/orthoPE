@@ -3,7 +3,6 @@ import datahandlers
 
 n_jobs = -2  # use one fewer than max jobs
 
-fonts = ['courier', 'courieri', 'cambria', 'verdana', 'cambriai', 'comic']
 language = 'german'
 
 # calculate for all German stimuli presented in Gagl et al.
