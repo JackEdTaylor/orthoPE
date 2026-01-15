@@ -36,18 +36,6 @@ font_dict   = {'courier'        : fontpath / 'couriernew.ttf',
 			   'liberationmono' : fontpath / 'liberationmono.ttf',
 			   'comic'          : fontpath / 'comic.ttf'}
 
-# self = OrthopeEstimator('german', 'courier', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
-# self = OrthopeEstimator('german', 'comic', prior_font='courier', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
-# self = OrthopeEstimator('german', 'verdana', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
-# self = OptimalTransportOrthopeEstimator('german', 'courier', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
-# self = OptimalTransportOrthopeEstimator('german', 'verdana', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
-# self = WithinLetterOptimalTransportOrthopeEstimator('german', 'courier', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
-# self = WithinLetterOptimalTransportOrthopeEstimator('german', 'verdana', gauss_noise_sd=0.0, input_words=['Tisch', 'Lampe'], data_label='test')
-
-# self = ImageOrthopeEstimator(language='german', font='courier', gauss_noise_sd=0.0, input_words=['data_repository/images/german/8_Raupi_pw_liberation mono.png', 'data_repository/images/german/10_Kruhs_pw_liberation mono.png', 'data_repository/images/german/17_Lobby_w_comic sans ms.png'], data_label='test')
-
-# self = ImageOrthopeEstimator(language='german', font='image', gauss_noise_sd=0.0, input_words=None, data_label='test')
-
 def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2):
 	# function to apply the "drift noise"
 	max_drift_dist = round(max_drift_dist)
@@ -561,7 +549,7 @@ class OrthopeEstimator():
 			# Applying additive Gaussian noise
 			noise_array  = gauss_noise_sd * np.random.randn(*render_array.shape)
 			text_array   = (render_array + noise_array).flatten()
-			
+
 			if show:
 				plt.figure()
 				plt.imshow(render_array + noise_array, cmap='gray', vmin=0.0, vmax=max([text_array.max(), 1.0]), interpolation='none')
