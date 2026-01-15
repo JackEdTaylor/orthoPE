@@ -138,7 +138,7 @@ class OrthopeEstimator():
 		bin_thresholds = [None, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  # binary thresholds to test
 		
 		n_obs   = 100 if self.gauss_noise_sd > 0 else 1
-		opes_df = pd.DataFrame(index=words)
+		opes_data = {word: {} for word in words}
 
 		for est in estimates:
 			if self.verbose:
@@ -152,12 +152,14 @@ class OrthopeEstimator():
 					for thr in bin_thresholds:
 						opes = [self.__estimate_ope__(word, est, bin_threshold=thr) for _ in range(n_obs)]
 						est_lab = est if thr is None else est+'_thr_'+str(thr)
-						opes_df.at[word, est_lab+'_mu']  = np.mean(opes)
-						opes_df.at[word, est_lab+'_std'] = np.std(opes)
+						opes_data[word][est_lab+'_mu']  = np.mean(opes)
+						opes_data[word][est_lab+'_std'] = np.std(opes)
 				else:
 					opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
-					opes_df.at[word, est+'_mu']  = np.mean(opes)
-					opes_df.at[word, est+'_std'] = np.std(opes)
+					opes_data[word][est+'_mu']  = np.mean(opes)
+					opes_data[word][est+'_std'] = np.std(opes)
+
+		opes_df = pd.DataFrame.from_dict(opes_data, orient='index')
 
 		if save:
 			opes_df.to_csv(self.opespath)
@@ -859,7 +861,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 						]
 		
 		n_obs   = 100 if self.gauss_noise_sd > 0 else 1
-		opes_df = pd.DataFrame(index=words)
+		opes_data = {word: {} for word in words}
 
 		for est in estimates:
 			if self.verbose:
@@ -870,8 +872,10 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 			
 			for word in words_iterator:
 				opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
-				opes_df.at[word, est+'_mu']  = np.mean(opes)
-				opes_df.at[word, est+'_std'] = np.std(opes)
+				opes_data[word][est+'_mu']  = np.mean(opes)
+				opes_data[word][est+'_std'] = np.std(opes)
+
+		opes_df = pd.DataFrame.from_dict(opes_data, orient='index')
 
 		if save:
 			opes_df.to_csv(self.opespath)
