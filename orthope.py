@@ -135,7 +135,7 @@ class OrthopeEstimator():
 		bin_pred_estimates = ['pred_err_l1', 'pred_err_l2', 'pw_pred_err',
 							  'mahalanobis', 'kalmanw_pred_err']
 		
-		bin_thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  # binary thresholds to test
+		bin_thresholds = [None, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  # binary thresholds to test
 		
 		n_obs   = 100 if self.gauss_noise_sd > 0 else 1
 		opes_df = pd.DataFrame(index=words)
@@ -151,8 +151,9 @@ class OrthopeEstimator():
 				if est in bin_pred_estimates:
 					for thr in bin_thresholds:
 						opes = [self.__estimate_ope__(word, est, bin_threshold=thr) for _ in range(n_obs)]
-						opes_df.at[word, est+str(thr)+'_mu']  = np.mean(opes)
-						opes_df.at[word, est+str(thr)+'_std'] = np.std(opes)
+						est_lab = est if thr is None else est+'_thr_'+str(thr)
+						opes_df.at[word, est_lab+'_mu']  = np.mean(opes)
+						opes_df.at[word, est_lab+'_std'] = np.std(opes)
 				else:
 					opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
 					opes_df.at[word, est+'_mu']  = np.mean(opes)
