@@ -304,7 +304,9 @@ class OrthopeEstimator():
 							 'sigma': sigma,
 							 'pi':    pi,
 							 'pi_id': pi_id,
-							 'kal':   kal}
+							 'kal':   kal,
+							 'pi_is_nan': np.all(np.isnan(pi)),
+							 'kal_is_nan': np.all(np.isnan(kal))}
 
 		return None
 	
@@ -426,7 +428,7 @@ class OrthopeEstimator():
 			case 'pred_err_l2':
 				ope = np.linalg.norm(e)
 			case 'pw_pred_err':
-				if np.sum(e)==0.0:
+				if not e.any():
 					ope = np.nan
 				else:
 					ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
@@ -445,73 +447,15 @@ class OrthopeEstimator():
 						s = x.reshape(self.full_array_dims),
 						t = self.corpus_stats['mu'].reshape(self.full_array_dims))
 			case 'mahalanobis':
-				if np.all(np.isnan(self.corpus_stats['pi'])):
+				if self.corpus_stats['pi_is_nan']:
 					ope = np.nan
 				else:
-					if np.sum(e)==0.0:
+					if not e.any():
 						ope = np.nan
 					else:
 						ope = (e @ self.corpus_stats['pi'] @ e.T)**.5
 			case 'kalmanw_pred_err':
-				if np.all(np.isnan(self.corpus_stats['kal'])):
-					ope = np.nan
-				else:
-					ope = np.linalg.norm(self.corpus_stats['kal'] @ e)
-
-		return ope
-	
-	def __estimate_ope__(self, word, estimate, bin_threshold=None):
-
-		x = self.__render_text__(word, gauss_noise_sd=self.gauss_noise_sd)
-		# x_no_noise = self.__render_text__(word, gauss_noise_sd=0.0)
-
-		if 'n_pixels_' in estimate or '_wd' in estimate or '_gwd' in estimate:
-			if bin_threshold is not None:
-				raise ValueError(f'Don\'t know how to apply binary prediction threshold to {estimate}')
-		else:
-			e = x - self.corpus_stats['mu']
-			if bin_threshold is not None:
-				e = (e > bin_threshold).astype(e.dtype)
-
-		match estimate:
-			case 'n_pixels_l1':
-				ope = x.sum()
-			case 'n_pixels_l2':
-				ope = np.linalg.norm(x)
-			case 'pred_err_l1':
-				# ope = e.sum()
-				ope = abs(e).sum()
-			case 'pred_err_l2':
-				ope = np.linalg.norm(e)
-			case 'pw_pred_err':
-				if np.sum(e)==0.0:
-					ope = np.nan
-				else:
-					ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
-			case 'pred_err_wd':
-				if self.font == 'word' or self.gauss_noise_sd!=0.0:
-					ope = np.nan
-				else:
-					ope = otfuns.get_w(
-						s = x.reshape(self.full_array_dims),
-						t = self.corpus_stats['mu'].reshape(self.full_array_dims))
-			case 'pred_err_gwd':
-				if self.font == 'word' or self.gauss_noise_sd!=0.0:
-					ope = np.nan
-				else:
-					ope = otfuns.get_gw(
-						s = x.reshape(self.full_array_dims),
-						t = self.corpus_stats['mu'].reshape(self.full_array_dims))
-			case 'mahalanobis':
-				if np.all(np.isnan(self.corpus_stats['pi'])):
-					ope = np.nan
-				else:
-					if np.sum(e)==0.0:
-						ope = np.nan
-					else:
-						ope = (e @ self.corpus_stats['pi'] @ e.T)**.5
-			case 'kalmanw_pred_err':
-				if np.all(np.isnan(self.corpus_stats['kal'])):
+				if self.corpus_stats['kal_is_nan']:
 					ope = np.nan
 				else:
 					ope = np.linalg.norm(self.corpus_stats['kal'] @ e)
