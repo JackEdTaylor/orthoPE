@@ -14,11 +14,23 @@ n_letters = dh.get_nletter_lims()
 
 # courier new model
 est1 = orthope.OrthopeEstimator(language, 'courier', gauss_noise_sd=0.1, n_letters=n_letters, input_words=input_words, data_label='test')
-est1.estimate_corpus_stats()
 
+# demonstrate the "drift" noise
+_ = est1.__render_text__('Tisch', drift_noise_prop=0.25, max_drift_dist_prop=0.05, show=True)
+_ = est1.__render_text__('Tisch', drift_noise_prop=0.25, max_drift_dist_prop=0.50, show=True)
+_ = est1.__render_text__('Tisch', drift_noise_prop=0.50, max_drift_dist_prop=0.05, show=True)
+_ = est1.__render_text__('Tisch', drift_noise_prop=0.50, max_drift_dist_prop=0.50, show=True)
+
+
+_ = est1.__render_text__('Tisch', gauss_noise_sd=0.25, show=True)
+
+est1.estimate_corpus_stats()
 est1.plot_stat('mu')     # simple average
 est1.plot_stat('sigma')  # covariance
 est1.plot_stat('kal')    # kalman gain
+
+# example opes df
+est1_opes_df = est1.__create_opes_df__(words=['Hacee', 'Sanee', 'Häuse', 'Tisch', 'XXXXX'], save=False)
 
 # est1.plot_stat('pi')     # precision matrix (does not converge when gauss_noise_sd==0.0)
 # est1.plot_stat('pi_id')  # diagonal of precision matrix (does not converge when gauss_noise_sd==0.0)
@@ -96,22 +108,3 @@ otest6 = orthope.WithinLetterOptimalTransportOrthopeEstimator(language, 'courier
 otest6.estimate_corpus_stats()
 
 otest6.plot_stat('bcs')
-
-# OT estimator with per-letter barycentre as orthogrpahic prior, with some gaussian gauss_noise_sd
-# (even small font sizes seem to be unfeasible)
-# otestn = orthope.WithinLetterOptimalTransportOrthopeEstimator(language, 'courier', gauss_noise_sd=0.01, n_letters=(6, 6), input_words=[], data_label='test', font_size=8)
-# otestn.estimate_corpus_stats()
-
-# otestn.plot_stat('bcs')
-
-# To do:
-# - within-letter class for basic method, so that we can support different prior and input fonts - done
-# - all the pixel-wise methods for the optimal transport class (e.g., calculate Kalman gain for Wasserstein barycentres) - doesn't make sense!
-# - option to binarise mu with threshold - done
-# - measure time to run for each method
-# - support different min and max letters for optimal transport?
-# - send example output to Benjamin
-
-# Things I need info from Alex to do:
-# - different noise methods: N(0, sigma) across whole image that we currently have, and the degradation method ("drift") that Benjamin has used. The function exists, but could Alex write the Kalman gain code?
-# - separate between prior and observed sigma
