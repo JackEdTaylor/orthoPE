@@ -36,8 +36,10 @@ font_dict   = {'courier'        : fontpath / 'couriernew.ttf',
 			   'liberationmono' : fontpath / 'liberationmono.ttf',
 			   'comic'          : fontpath / 'comic.ttf'}
 
-def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2):
+def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2, rng=None):
 	# function to apply the "drift noise"
+	if rng is None:
+		rng = np.random
 	max_drift_dist = round(max_drift_dist)
 	if drift_noise_prop > 0.0 and max_drift_dist > 0.0:
 		render_idx = np.transpose(np.where(~np.isnan(text_array)))
@@ -51,8 +53,8 @@ def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2):
 		sw_px_idx = np.where(swap_px)
 
 		n_drift_px = int(np.round(drift_noise_prop * np.sum(nz_px)))
-		samp_sw = np.random.choice(np.sum(swap_px), size=n_drift_px, replace=False)
-		samp_nz = np.random.choice(np.sum(nz_px), size=n_drift_px, replace=False)
+		samp_sw = rng.choice(np.sum(swap_px), size=n_drift_px, replace=False)
+		samp_nz = rng.choice(np.sum(nz_px), size=n_drift_px, replace=False)
 		text_array_copy = text_array.copy()
 		text_array[sw_px_idx[0][samp_sw], sw_px_idx[1][samp_sw]]  = text_array_copy[nz_px_idx[0][samp_nz], nz_px_idx[1][samp_nz]]
 		text_array[nz_px_idx[0][samp_nz], nz_px_idx[1][samp_nz]]  = text_array_copy[sw_px_idx[0][samp_sw], sw_px_idx[1][samp_sw]]
@@ -61,6 +63,8 @@ def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2):
 class OrthopeEstimator():
 
 	def __init__(self, language, font, gauss_noise_sd, input_words, font_size=28, prior_font=None, force_monospace=False, n_letters=(5, 5), freq_perc=(0, 100), freq_weight=True, pad_w_per_char=4, pad_top=2, pad_bottom=2, data_label=None, n_threads=None, verbose=True):
+		
+		self.n_threads = n_threads
 		if n_threads is not None:
 			# limit threads for this process, to make parallel-friendly
 			n_threads = str(n_threads)
@@ -90,6 +94,9 @@ class OrthopeEstimator():
 		self.pad_top          = pad_top
 		self.pad_bottom       = pad_bottom
 		self.verbose		  = verbose
+		
+		# Thread-safe random state for each estimator instance
+		self.rng = np.random.RandomState()
 
 		# store subset info (two-unit lists/tuples of >= and <= cutoffs)
 		#  - if just one number is given, this will be used as both >= and <= cutoff
@@ -140,6 +147,15 @@ class OrthopeEstimator():
 		n_obs   = 100 if self.gauss_noise_sd > 0 else 1
 		opes_data = {word: {} for word in words}
 
+		# Pre-render all words without noise to cache them (huge speedup!)
+		if self.verbose:
+			print('Pre-rendering words without noise...')
+			words_to_render = tqdm(words)
+		else:
+			words_to_render = words
+		
+		word_renders = {word: self.__render_text__(word, gauss_noise_sd=0.0) for word in words_to_render}
+
 		for est in estimates:
 			if self.verbose:
 				print(f'Computing estimates for {est}')
@@ -148,14 +164,20 @@ class OrthopeEstimator():
 				words_iterator = words
 			
 			for word in words_iterator:
+				# Render with noise n_obs times
+				if self.gauss_noise_sd > 0:
+					x_renders = [word_renders[word] + self.gauss_noise_sd * self.rng.randn(*word_renders[word].shape) for _ in range(n_obs)]
+				else:
+					x_renders = [word_renders[word]]
+				
 				if est in bin_pred_estimates:
 					for thr in bin_thresholds:
-						opes = [self.__estimate_ope__(word, est, bin_threshold=thr) for _ in range(n_obs)]
+						opes = [self.__estimate_ope_from_render__(x, est, bin_threshold=thr) for x in x_renders]
 						est_lab = est if thr is None else est+'_thr_'+str(thr)
 						opes_data[word][est_lab+'_mu']  = np.mean(opes)
 						opes_data[word][est_lab+'_std'] = np.std(opes)
 				else:
-					opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
+					opes = [self.__estimate_ope_from_render__(x, est) for x in x_renders]
 					opes_data[word][est+'_mu']  = np.mean(opes)
 					opes_data[word][est+'_std'] = np.std(opes)
 
@@ -380,6 +402,69 @@ class OrthopeEstimator():
 		x = self.__render_text__(word, gauss_noise_sd=self.gauss_noise_sd)
 		# x_no_noise = self.__render_text__(word, gauss_noise_sd=0.0)
 
+		return self.__estimate_ope_from_render__(x, estimate, bin_threshold=bin_threshold)
+	
+	def __estimate_ope_from_render__(self, x, estimate, bin_threshold=None):
+		"""Compute OPE from pre-rendered text array (avoids re-rendering)."""
+
+		if 'n_pixels_' in estimate or '_wd' in estimate or '_gwd' in estimate:
+			if bin_threshold is not None:
+				raise ValueError(f'Don\'t know how to apply binary prediction threshold to {estimate}')
+		else:
+			e = x - self.corpus_stats['mu']
+			if bin_threshold is not None:
+				e = (e > bin_threshold).astype(e.dtype)
+
+		match estimate:
+			case 'n_pixels_l1':
+				ope = x.sum()
+			case 'n_pixels_l2':
+				ope = np.linalg.norm(x)
+			case 'pred_err_l1':
+				# ope = e.sum()
+				ope = abs(e).sum()
+			case 'pred_err_l2':
+				ope = np.linalg.norm(e)
+			case 'pw_pred_err':
+				if np.sum(e)==0.0:
+					ope = np.nan
+				else:
+					ope = np.linalg.norm(e * self.corpus_stats['pi_id'])
+			case 'pred_err_wd':
+				if self.font == 'word' or self.gauss_noise_sd!=0.0:
+					ope = np.nan
+				else:
+					ope = otfuns.get_w(
+						s = x.reshape(self.full_array_dims),
+						t = self.corpus_stats['mu'].reshape(self.full_array_dims))
+			case 'pred_err_gwd':
+				if self.font == 'word' or self.gauss_noise_sd!=0.0:
+					ope = np.nan
+				else:
+					ope = otfuns.get_gw(
+						s = x.reshape(self.full_array_dims),
+						t = self.corpus_stats['mu'].reshape(self.full_array_dims))
+			case 'mahalanobis':
+				if np.all(np.isnan(self.corpus_stats['pi'])):
+					ope = np.nan
+				else:
+					if np.sum(e)==0.0:
+						ope = np.nan
+					else:
+						ope = (e @ self.corpus_stats['pi'] @ e.T)**.5
+			case 'kalmanw_pred_err':
+				if np.all(np.isnan(self.corpus_stats['kal'])):
+					ope = np.nan
+				else:
+					ope = np.linalg.norm(self.corpus_stats['kal'] @ e)
+
+		return ope
+	
+	def __estimate_ope__(self, word, estimate, bin_threshold=None):
+
+		x = self.__render_text__(word, gauss_noise_sd=self.gauss_noise_sd)
+		# x_no_noise = self.__render_text__(word, gauss_noise_sd=0.0)
+
 		if 'n_pixels_' in estimate or '_wd' in estimate or '_gwd' in estimate:
 			if bin_threshold is not None:
 				raise ValueError(f'Don\'t know how to apply binary prediction threshold to {estimate}')
@@ -547,10 +632,10 @@ class OrthopeEstimator():
 				if max_drift_dist < 1.0:
 					warnings.warn('max_drift_dist_prop * text height produces a drift distance of <1, so no drift will be applied')
 				else:
-					render_array = add_drift_noise(render_array, drift_noise_prop=drift_noise_prop, max_drift_dist=max_drift_dist)
+					render_array = add_drift_noise(render_array, drift_noise_prop=drift_noise_prop, max_drift_dist=max_drift_dist, rng=self.rng)
 
 			# Applying additive Gaussian noise
-			noise_array  = gauss_noise_sd * np.random.randn(*render_array.shape)
+			noise_array  = gauss_noise_sd * self.rng.randn(*render_array.shape)
 			text_array   = (render_array + noise_array).flatten()
 
 			if show:
@@ -744,7 +829,7 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 		for cix, c in enumerate(text):
 			render_array[cix, alphabet.index(c)] = 1
 		
-		noise_array = gauss_noise_sd * np.random.randn(*render_array.shape)
+		noise_array = gauss_noise_sd * self.rng.randn(*render_array.shape)
 		text_array  = (render_array + noise_array).flatten()
 
 		return text_array
@@ -863,6 +948,15 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		n_obs   = 100 if self.gauss_noise_sd > 0 else 1
 		opes_data = {word: {} for word in words}
 
+		# Pre-render all words and letters without noise to cache them (huge speedup!)
+		if self.verbose:
+			print('Pre-rendering words without noise...')
+			words_to_render = tqdm(words)
+		else:
+			words_to_render = words
+		
+		word_renders = {word: [self.__render_text__(L, gauss_noise_sd=0.0) for L in list(word)] for word in words_to_render}
+
 		for est in estimates:
 			if self.verbose:
 				print(f'Computing estimates for {est}')
@@ -871,7 +965,13 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 				words_iterator = words
 			
 			for word in words_iterator:
-				opes = [self.__estimate_ope__(word,est) for _ in range(n_obs)]
+				# Render with noise n_obs times
+				if self.gauss_noise_sd > 0:
+					x_renders = [[L_render + self.gauss_noise_sd * self.rng.randn(*L_render.shape) for L_render in word_renders[word]] for _ in range(n_obs)]
+				else:
+					x_renders = [word_renders[word] for _ in range(n_obs)]
+				
+				opes = [self.__estimate_ope_from_renders__(x, est) for x in x_renders]
 				opes_data[word][est+'_mu']  = np.mean(opes)
 				opes_data[word][est+'_std'] = np.std(opes)
 
@@ -924,6 +1024,31 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		ax.set_title(stat_lab)
 		return fig, ax
 	
+	def __estimate_ope_from_renders__(self, x_list, estimate):
+		"""Compute OPE from pre-rendered letter list (avoids re-rendering)."""
+		x_2d = [x_i.reshape(self.full_array_dims) for x_i in x_list]
+
+		e = [x_2d_i - bc_i for x_2d_i, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
+
+		match estimate:
+			case 'pred_err_l1':
+				ope = abs(np.hstack(e)).sum()
+			case 'pred_err_l2':
+				ope = np.linalg.norm(np.hstack(e))
+			case 'pred_err_wd':
+				if self.gauss_noise_sd!=0.0:
+					ope = np.nan
+				else:
+					ope_L = [otfuns.get_w(s = L, t = bc_i) for L, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
+					ope = np.sum(ope_L)
+			case 'pred_err_gwd':
+				if self.gauss_noise_sd!=0.0:
+					ope = np.nan
+				else:
+					ope_L = [otfuns.get_gw(s = L, t = bc_i) for L, bc_i in zip(x_2d, self.corpus_stats['bcs'])]
+					ope = np.sum(ope_L)
+		return ope
+	
 	def __estimate_ope__(self, word, estimate):
 
 		x = [self.__render_text__(L, gauss_noise_sd=self.gauss_noise_sd) for L in list(word)]
@@ -951,7 +1076,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		return ope
 
 
-def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_jobs=1, save_at_each=True):
+def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_jobs=1, save_at_each=True, joblib_backend='loky'):
 	
 	if n_jobs != 1:
 		# function that will be called in parallel
@@ -991,7 +1116,7 @@ def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_job
 		]
 	
 		# Estimate all in parallel
-		out = Parallel(n_jobs=n_jobs, timeout=8**8)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_li, *ggs_ot, *ggs_euc], desc=tqdm_desc))
+		out = Parallel(n_jobs=n_jobs, backend=joblib_backend, timeout=8**8)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_li, *ggs_ot, *ggs_euc], desc=tqdm_desc))
 
 		# save all at end if this is set
 		if not save_at_each:
