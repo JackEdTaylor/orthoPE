@@ -1,0 +1,117 @@
+import orthope
+import datahandlers
+import pandas as pd
+import numpy as np
+import scipy as sp
+import matplotlib.pyplot as plt
+
+language = 'german'
+
+# get input words from Gagl et al. (2020)
+dh = datahandlers.Gagl2020DataHandler(language=language)
+input_words = dh.get_unique_words()
+n_letters = dh.get_nletter_lims()
+
+# courier new model
+est1 = orthope.OrthopeEstimator(language, 'courier', gauss_noise_sd=0.1, n_letters=n_letters, input_words=input_words, data_label='test')
+est1.estimate_corpus_stats()
+
+est1.plot_stat('mu')     # simple average
+est1.plot_stat('sigma')  # covariance
+est1.plot_stat('kal')    # kalman gain
+
+# est1.plot_stat('pi')     # precision matrix (does not converge when gauss_noise_sd==0.0)
+# est1.plot_stat('pi_id')  # diagonal of precision matrix (does not converge when gauss_noise_sd==0.0)
+
+# force comic sans to be monospaced
+est1_mono = orthope.OrthopeEstimator(language, 'comic', gauss_noise_sd=0.1, n_letters=n_letters, input_words=input_words, data_label='test', force_monospace=True)
+est1_mono.estimate_corpus_stats()
+
+est1_mono.plot_stat('mu')     # simple average
+est1_mono.plot_stat('sigma')  # covariance
+est1_mono.plot_stat('kal')    # kalman gain
+
+est2 = orthope.OrthopeEstimator(language, 'courier', gauss_noise_sd=0.1, n_letters=n_letters, input_words=input_words, data_label='test')
+est2.estimate_corpus_stats()
+
+est2.plot_stat('pi')     # precision matrix
+est2.plot_stat('pi_id')  # diagonal of precision matrix
+
+# estimate Kalman-weighted prediction error
+est1.__estimate_ope__('Tisch', 'kalmanw_pred_err')
+
+# estimate wasserstein / gromov-wasserstein distance from mu
+est1.__estimate_ope__('Tisch', 'pred_err_wd')
+est1.__estimate_ope__('Tisch', 'pred_err_gwd')  # takes a lot longer!
+
+# simple average with no frequency-weighting (i.e., type-weighting instead of token-weighting)
+est3 = orthope.OrthopeEstimator(language, 'courier', gauss_noise_sd=0.0, n_letters=n_letters, input_words=input_words, freq_weight=False, data_label='test')
+est3.estimate_corpus_stats()
+
+# compare mu between weighted and unweighted
+est1.plot_stat('mu')
+est3.plot_stat('mu')
+mu1 = est1.corpus_stats['mu']
+mu3 = est3.corpus_stats['mu']
+
+# remove shared zeroes
+nz = (mu1>0) & (mu3>0)
+mu1 = mu1[nz]
+mu3 = mu3[nz]
+
+plt.scatter(mu1, mu3, s=0.1)
+plt.hist(mu1 - mu3, bins=100)
+sp.stats.pearsonr(mu1, mu3)
+
+# use only the top 5% of words, but no frequency weighting
+est4 = orthope.OrthopeEstimator(language, 'courier', gauss_noise_sd=0.0, n_letters=n_letters, freq_perc=(95, 100), input_words=input_words, freq_weight=False, data_label='test')
+est4.estimate_corpus_stats()
+est4.plot_stat('mu')
+
+# estimator using different prior and input fonts
+est5 = orthope.OrthopeEstimator(language, 'courier', prior_font='liberationmono', gauss_noise_sd=0.1, n_letters=n_letters, input_words=input_words, data_label='test')
+est5.estimate_corpus_stats()
+est5.plot_stat('mu')
+
+# prediction error estimator using letter identity
+Lest = orthope.LetterOrthopeEstimator(language, gauss_noise_sd=0.1, n_letters=n_letters, input_words=input_words, data_label='test')
+Lest.estimate_corpus_stats()
+plt.figure()
+plt.plot(Lest.corpus_stats['mu'])
+
+# estimator with per-letter barycentre as orthogrpahic prior
+otest = orthope.WithinLetterOptimalTransportOrthopeEstimator(language, 'liberationserif', gauss_noise_sd=0.0, n_letters=n_letters, input_words=input_words, data_label='test')
+otest.estimate_corpus_stats()
+
+otest.plot_stat('bcs')
+
+otest.__estimate_ope__('Hacee', 'pred_err_wd')
+otest.__estimate_ope__('Sanee', 'pred_err_wd')
+otest.__estimate_ope__('Häuse', 'pred_err_wd')
+otest.__estimate_ope__('Tisch', 'pred_err_wd')
+otest.__estimate_ope__('XXXXX', 'pred_err_wd')
+
+# 6-letter estimator with per-letter barycentre as orthogrpahic prior, with larger font size
+otest6 = orthope.WithinLetterOptimalTransportOrthopeEstimator(language, 'courier', gauss_noise_sd=0.0, n_letters=(6, 6), input_words=[], data_label='test', font_size=45)
+otest6.estimate_corpus_stats()
+
+otest6.plot_stat('bcs')
+
+# OT estimator with per-letter barycentre as orthogrpahic prior, with some gaussian gauss_noise_sd
+# (even small font sizes seem to be unfeasible)
+# otestn = orthope.WithinLetterOptimalTransportOrthopeEstimator(language, 'courier', gauss_noise_sd=0.01, n_letters=(6, 6), input_words=[], data_label='test', font_size=8)
+# otestn.estimate_corpus_stats()
+
+# otestn.plot_stat('bcs')
+
+# To do:
+# - within-letter class for basic method, so that we can support different prior and input fonts - done
+# - all the pixel-wise methods for the optimal transport class (e.g., calculate Kalman gain for Wasserstein barycentres) - doesn't make sense!
+# - option to binarise mu with threshold - done
+# - measure time to run for each method
+# - support different min and max letters for optimal transport?
+# - send example output to Benjamin
+
+# Things I need info from Alex to do:
+# - different noise methods: N(0, sigma) across whole image that we currently have, and the degradation method ("drift") that Benjamin has used. The function exists, but could Alex write the Kalman gain code?
+# - separate between prior and observed sigma

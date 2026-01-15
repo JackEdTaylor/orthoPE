@@ -1,0 +1,16 @@
+name: orthope
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - numpy
+  - scipy
+  - tqdm
+  - pillow
+  - pandas<2.0.0
+  - matplotlib
+  - pot=0.9.6
+  - networkx
+  - joblib
+  - ipykernel<7
