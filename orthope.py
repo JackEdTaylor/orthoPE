@@ -39,7 +39,7 @@ font_dict   = {'courier'        : fontpath / 'couriernew.ttf',
 def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2, rng=None):
 	# function to apply the "drift noise"
 	if rng is None:
-		rng = np.random
+		rng = np.random.RandomState()
 	if not np.isinf(max_drift_dist):
 		max_drift_dist = round(max_drift_dist)
 	if drift_noise_prop > 0.5:
