@@ -780,6 +780,8 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 
 		render_array = np.zeros((max_n_letters, len(alphabet)))
 		for cix, c in enumerate(text):
+			if c not in alphabet:
+				raise ValueError(f'Character "{c}" in word "{text}" not in alphabet')
 			render_array[cix, alphabet.index(c)] = 1
 		
 		noise_array = gauss_noise_sd * self.rng.randn(*render_array.shape)
