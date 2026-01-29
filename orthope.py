@@ -1059,7 +1059,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		return ope
 
 
-def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_jobs=1, save_at_each=True, joblib_backend='loky'):
+def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_jobs=1, save_at_each=True, joblib_backend='loky', reverse_estimator_list=False):
 	
 	if n_jobs != 1:
 		# function that will be called in parallel
@@ -1097,9 +1097,16 @@ def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_job
 			for freq_weight in (True, False)
 			for force_monospace in (True, False)
 		]
+
+		# create the estimators list
+		estimators = [*ggs_li, *ggs_ot, *ggs_euc]
+
+		# reverse model list if requested
+		if reverse_estimator_list:
+			list(reversed(estimators))
 	
 		# Estimate all in parallel
-		out = Parallel(n_jobs=n_jobs, backend=joblib_backend, timeout=8**8)(delayed(do_load_opes)(gg_i) for gg_i in tqdm([*ggs_li, *ggs_ot, *ggs_euc], desc=tqdm_desc))
+		out = Parallel(n_jobs=n_jobs, backend=joblib_backend, timeout=8**8)(delayed(do_load_opes)(gg_i) for gg_i in tqdm(estimators, desc=tqdm_desc))
 
 		# save all at end if this is set
 		if not save_at_each:
