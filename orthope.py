@@ -279,12 +279,10 @@ class OrthopeEstimator():
 				pi = np.zeros(sigma.shape)
 				pi[:] = np.nan
 
-			if np.any(np.diag(sigma)==0):
-				# avoid division by zero when calculating inverse of sigma
-				sigma_diag_noise = np.random.normal(0, 1e-12, size=np.diag(sigma).size)
-				pi_id = 1 / (np.diag(sigma) + sigma_diag_noise)
-			else:
-				pi_id = 1 / (np.diag(sigma))
+			# avoid division by zero when calculating inverse of sigma
+			diag_sigma = np.diag(sigma)
+			diag_sigma[diag_sigma == 0] = np.finfo(float).eps
+			pi_id = 1 / diag_sigma
 
 			# Kalman gain assuming same obs_noise in past and current experiences
 			# print('Estimating Kalman gain...')
