@@ -632,9 +632,11 @@ class OrthopeEstimator():
 		space_locs = space_centres[1:-1]
 
 		# get N deepest troughs
-		space_locs_idx = np.argpartition(-max_xaxis[space_locs], -expected_spaces)[-expected_spaces:]
-
-		space_locs = space_locs[space_locs_idx]
+		if expected_spaces == 0:
+			space_locs = np.array([])
+		else:
+			space_locs_idx = np.argpartition(-max_xaxis[space_locs], -expected_spaces)[-expected_spaces:]
+			space_locs = space_locs[space_locs_idx]
 
 		if show:
 			plt.imshow(x_2d, interpolation='none', cmap='Greys')
