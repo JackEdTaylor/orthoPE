@@ -419,7 +419,7 @@ class OrthopeEstimator():
 
 		match estimate:
 			case 'n_pixels_l1':
-				ope = x.sum()
+				ope = abs(x).sum()
 			case 'n_pixels_l2':
 				ope = np.linalg.norm(x)
 			case 'pred_err_l1':
