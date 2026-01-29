@@ -40,7 +40,10 @@ def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2, rng=None):
 	# function to apply the "drift noise"
 	if rng is None:
 		rng = np.random
-	max_drift_dist = round(max_drift_dist)
+	if not np.isinf(max_drift_dist):
+		max_drift_dist = round(max_drift_dist)
+	if drift_noise_prop > 0.5:
+		warnings.warn('Current implementation of drift noise means that drift_noise_prop > 0.5 can create a negative image around the word, since pixels cannot currently drift to within the word.')
 	if drift_noise_prop > 0.0 and max_drift_dist > 0.0:
 		render_idx = np.transpose(np.where(~np.isnan(text_array)))
 		z_px  = text_array==0.0
@@ -554,9 +557,29 @@ class OrthopeEstimator():
 			force_monospace = self.force_monospace
 
 		if force_monospace:
-			array_2d_list = [ self.__render_text__(text=L, is_prior=is_prior, gauss_noise_sd=gauss_noise_sd, drift_noise_prop=drift_noise_prop, force_monospace=False, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, show=show).reshape(self.array_dims) for L in text]
+			array_2d_list = [ self.__render_text__(text=L, is_prior=is_prior, gauss_noise_sd=gauss_noise_sd, drift_noise_prop=False, force_monospace=False, pad_w_per_char=pad_w_per_char, pad_top=pad_top, pad_bottom=pad_bottom, show=False).reshape(self.array_dims) for L in text]
 			text_array_2d = np.hstack(array_2d_list)
+
+			# apply proportional drift noise only after joining characters together
+			if drift_noise_prop > 0:
+				text_bbox_height = self.array_dims[0] - self.text_bbox_pad[1] - self.text_bbox_pad[3]  # height of the arrays without padding
+				if np.isinf(max_drift_dist_prop):
+					max_drift_dist = max_drift_dist_prop  # i.e., the image dimensions set the bounds for the drift
+				else:
+					max_drift_dist = round(max_drift_dist_prop * text_bbox_height)  # proportion of the text height
+
+				if max_drift_dist < 1.0:
+					warnings.warn('max_drift_dist_prop * text height produces a drift distance of <1, so no drift will be applied')
+				else:
+					text_array_2d = add_drift_noise(text_array_2d, drift_noise_prop=drift_noise_prop, max_drift_dist=max_drift_dist, rng=self.rng)
+			
 			text_array    = text_array_2d.flatten()
+
+			if show:
+				plt.figure()
+				plt.imshow(text_array_2d, cmap='gray', vmin=0.0, vmax=max([text_array.max(), 1.0]), interpolation='none')
+				plt.colorbar()
+			
 		else:
 			# set up font
 			if is_prior:
