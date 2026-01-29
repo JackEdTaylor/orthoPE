@@ -868,7 +868,12 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		# for each slot, render all letters that occur in that slot
 		words_letts = [list(w) for w in self.corpus_df.word]
 
-		# (currently assumes that all words have the same length)
+		# check that all words have the same length
+		word_lengths = [len(wl) for wl in words_letts]
+		if len(set(word_lengths)) > 1 or word_lengths[0] != self.n_letters[1]:
+			raise ValueError('WithinLetterOptimalTransportOrthopeEstimator requires all words to have the same number of letters.')
+
+		# (currently assumes that all words have the same length; checked above)
 		slot_letts_unique = [np.unique([wl[i] for wl in words_letts],
 								 return_inverse=True, return_counts=True)
 								 for i in range(self.n_letters[1])]
