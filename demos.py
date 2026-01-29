@@ -28,6 +28,8 @@ est1.estimate_corpus_stats()
 est1.plot_stat('mu')     # simple average
 est1.plot_stat('sigma')  # covariance
 est1.plot_stat('kal')    # kalman gain
+est1.plot_stat('pi')     # precision matrix
+est1.plot_stat('pi_id')  # diagonal of precision matrix
 
 # example opes df
 est1_opes_df = est1.__create_opes_df__(words=['Hacee', 'Sanee', 'Häuse', 'Tisch', 'XXXXX'], save=False)
@@ -37,6 +39,12 @@ est1_opes_df = est1.__create_opes_df__(words=['Hacee', 'Sanee', 'Häuse', 'Tisch
 
 # force comic sans to be monospaced
 est1_mono = orthope.OrthopeEstimator(language, 'comic', gauss_noise_sd=0.1, n_letters=n_letters, input_words=input_words, data_label='test', force_monospace=True)
+
+# show forced monospace with drift
+_ = est1_mono.__render_text__('Tisch', drift_noise_prop=0.5, max_drift_dist_prop=0.1, show=True)
+_ = est1_mono.__render_text__('Tisch', drift_noise_prop=1.0, max_drift_dist_prop=0.1, show=True)  # note that the negative image of the word is visible
+_ = est1_mono.__render_text__('Tisch', drift_noise_prop=1.0, max_drift_dist_prop=np.inf, show=True)  # show that this problem doesn't apply when max_drift_dist_prop is infinite
+
 est1_mono.estimate_corpus_stats()
 
 est1_mono.plot_stat('mu')     # simple average
