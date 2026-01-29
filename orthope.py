@@ -211,7 +211,8 @@ class OrthopeEstimator():
 				print(f'Excluded {is_missing_words.sum()} missing words')
 
 		# remove any non-alphabetic words
-		nonalph_regex = f'[^{"|".join(self.alphabet)}]'
+		escaped_alphabet = re.escape(self.alphabet)
+		nonalph_regex = f'[^{escaped_alphabet}]'
 		is_nonalph = np.array([bool(re.search(nonalph_regex, w)) for w in df.word])
 		df = df.loc[~is_nonalph, ]
 		if any(is_nonalph):
