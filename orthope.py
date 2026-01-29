@@ -268,7 +268,7 @@ class OrthopeEstimator():
 			mu    = np.average(dd, axis=0, weights=weights)
 			sigma = np.cov(dd, rowvar=False, aweights=weights)
 			
-			# Precission matrix: exact and assuming independent distributions
+			# Precision matrix: exact and assuming independent distributions
 			# print('Estimating precision matrices...')
 			try:
 				pi = scipy.linalg.pinvh(sigma)
