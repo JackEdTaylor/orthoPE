@@ -263,21 +263,21 @@ class OrthopeEstimator():
 			
 			# Precission matrix: exact and assuming independent distributions
 			# print('Estimating precision matrices...')
-			if self.gauss_noise_sd == 0.0:
-				warnings.warn('Setting precision matrices to np.inf, as gauss_noise_sd==0')
+			try:
+				pi = scipy.linalg.pinvh(sigma)
+			except np.linalg.LinAlgError as e:
+				# print(f'LinAlgError: {e}')
+				if iter_i < max_iter:
+					continue
 				pi = np.zeros(sigma.shape)
-				pi[:] = np.inf
-			else:
-				try:
-					pi = scipy.linalg.pinvh(sigma)
-				except np.linalg.LinAlgError as e:
-					# print(f'LinAlgError: {e}')
-					if iter_i < max_iter:
-						continue
-					pi = np.zeros(sigma.shape)
-					pi[:] = np.nan
+				pi[:] = np.nan
 
-			pi_id = 1 / (np.diag(sigma))
+			if np.any(np.diag(sigma)==0):
+				# avoid division by zero when calculating inverse of sigma
+				sigma_diag_noise = np.random.normal(0, 1e-12, size=np.diag(sigma).size)
+				pi_id = 1 / (np.diag(sigma) + sigma_diag_noise)
+			else:
+				pi_id = 1 / (np.diag(sigma))
 
 			# Kalman gain assuming same obs_noise in past and current experiences
 			# print('Estimating Kalman gain...')
