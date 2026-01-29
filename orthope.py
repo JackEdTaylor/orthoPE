@@ -288,7 +288,7 @@ class OrthopeEstimator():
 			# print('Estimating Kalman gain...')
 			obs_sigma = self.gauss_noise_sd * np.identity(sigma.shape[0])
 
-			# note: if we didn't care about ill conditioned matricesd, this would be a faster implementation of sigma @ np.linalg.inv(sigma + obs_sigma):
+			# note: if we didn't care about ill conditioned matrices, this would be a faster implementation of sigma @ np.linalg.inv(sigma + obs_sigma):
 			# kal = np.linalg.solve((sigma + obs_sigma).T, sigma.T).T
 			try:
 				# (use pinvh since sigma should be symmetric [although may not be due to numerical precision])
