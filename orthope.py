@@ -913,9 +913,9 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		fpmw = self.corpus_df['fpmw'].to_numpy()
 
-		# weight the letter counts by corresponding word frequencies
+		# calculate frequencies per million words of letters occurring in each slot
 		word_weights = [np.array(
-			[np.sum(slc[i] * fpmw[sli == i]) for i in range(len(slc))]
+			[np.sum(fpmw[sli == i]) for i in range(len(slc))]
 			) for slc, sli in zip(slot_letts_counts, slot_letts_idx)]
 
 		return dd, word_weights, lett_weights
