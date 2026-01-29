@@ -53,6 +53,9 @@ def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2, rng=None):
 		sw_px_idx = np.where(swap_px)
 
 		n_drift_px = int(np.round(drift_noise_prop * np.sum(nz_px)))
+		n_drift_px = min(n_drift_px, np.sum(swap_px), np.sum(nz_px))  # handle cases where n_drift_px > np.sum(swap_px)
+		if n_drift_px == 0:
+			return text_array
 		samp_sw = rng.choice(np.sum(swap_px), size=n_drift_px, replace=False)
 		samp_nz = rng.choice(np.sum(nz_px), size=n_drift_px, replace=False)
 		text_array_copy = text_array.copy()
@@ -769,6 +772,11 @@ class LetterOrthopeEstimator(OrthopeEstimator):
 		alphabet = self.alphabet
 
 		max_n_letters = max([len(text)]) if np.isinf(self.n_letters[1]) else self.n_letters[1]
+		
+		# check that the text is not longer than the max for the estimator
+		# (e.g., give a word that is longer than the max in the corpus)
+		if len(text) > max_n_letters:
+			raise ValueError(f'Text "{text}" has {len(text)} letters, but max is {max_n_letters}. Consider setting the max in n_letters manually if currently estimating from the corpus.')
 
 		render_array = np.zeros((max_n_letters, len(alphabet)))
 		for cix, c in enumerate(text):
