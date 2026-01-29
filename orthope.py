@@ -280,7 +280,7 @@ class OrthopeEstimator():
 				pi[:] = np.nan
 
 			# avoid division by zero when calculating inverse of sigma
-			diag_sigma = np.diag(sigma)
+			diag_sigma = np.diag(sigma).copy()
 			diag_sigma[diag_sigma == 0] = np.finfo(float).eps
 			pi_id = 1 / diag_sigma
 
