@@ -50,7 +50,7 @@ def add_drift_noise(text_array, drift_noise_prop, max_drift_dist=2, rng=None):
 		nz_px = np.invert(z_px)
 		nz_px_idx = np.where(nz_px)
 		
-		within_dist_idx = (scipy.spatial.distance.cdist(render_idx, np.transpose(nz_px_idx), metric='Euclidean').min(axis=1) <= max_drift_dist).reshape(text_array.shape)
+		within_dist_idx = (scipy.spatial.distance.cdist(render_idx, np.transpose(nz_px_idx), metric='euclidean').min(axis=1) <= max_drift_dist).reshape(text_array.shape)
 
 		swap_px = z_px & within_dist_idx
 		sw_px_idx = np.where(swap_px)
