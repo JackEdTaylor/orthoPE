@@ -271,7 +271,7 @@ class OrthopeEstimator():
 			# Precision matrix: exact and assuming independent distributions
 			# print('Estimating precision matrices...')
 			try:
-				pi = scipy.linalg.pinvh(sigma)
+				pi = sp.linalg.pinvh(sigma)
 			except np.linalg.LinAlgError as e:
 				# print(f'LinAlgError: {e}')
 				if iter_i < max_iter:
@@ -288,10 +288,12 @@ class OrthopeEstimator():
 			# print('Estimating Kalman gain...')
 			obs_sigma = self.gauss_noise_sd * np.identity(sigma.shape[0])
 
+			# note: if we didn't care about ill conditioned matricesd, this would be a faster implementation of sigma @ np.linalg.inv(sigma + obs_sigma):
+			# kal = np.linalg.solve((sigma + obs_sigma).T, sigma.T).T
 			try:
-				kal = sigma @ np.linalg.pinv(sigma + obs_sigma)
+				# (use pinvh since sigma should be symmetric [although may not be due to numerical precision])
+				kal = sigma @ sp.linalg.pinvh(sigma + obs_sigma)
 			except np.linalg.LinAlgError as e:
-				# print(f'LinAlgError: {e}')
 				if iter_i < max_iter:
 					continue
 				kal = np.zeros(sigma.shape)
