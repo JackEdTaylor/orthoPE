@@ -511,9 +511,9 @@ class OrthopeEstimator():
 		if np.unique(font_bboxes_f, axis=0).shape[0] > 1:
 			warnings.warn('Mismatch between dimensions of input font and prior font - will use max extents. Check font alignment!')
 			font_bboxes_f = np.array([font_bboxes_f[:, :2].min(axis=0),
-									font_bboxes_f[:, 2:].max(axis=0)]).flatten()
+									  font_bboxes_f[:, 2:].max(axis=0)]).flatten()
 		else:
-			font_bboxes_f = font_bboxes_f.flatten()
+			font_bboxes_f = font_bboxes_f[0, :]
 
 		# store in self
 		self.text_bbox_pad = bbox_pad
@@ -837,7 +837,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 			font_bboxes_f = np.array([font_bboxes_f[:, :2].min(axis=0),
 							   		  font_bboxes_f[:, 2:].max(axis=0)]).flatten()
 		else:
-			font_bboxes_f = font_bboxes_f.flatten()
+			font_bboxes_f = font_bboxes_f[0, :]
 
 		# store in self
 		self.text_bbox_pad = bbox_pad
