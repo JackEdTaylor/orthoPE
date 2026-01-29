@@ -616,7 +616,7 @@ class OrthopeEstimator():
 
 		return text_array
 	
-	def __get_letter_space_locs_from_xmax__(self, x_2d, expected_spaces=None, show=False):
+	def __get_letter_space_locs_from_xmax__(self, x_2d, expected_spaces, show=False):
 
 		# Detects the locations of spaces between letters, assuming that there are no breaks along the x axis within glyphs of a width greater than 12 pixels.
 		max_xaxis = x_2d.max(axis=0)
@@ -632,8 +632,6 @@ class OrthopeEstimator():
 		space_locs = space_centres[1:-1]
 
 		# get N deepest troughs
-		if expected_spaces is None:
-			expected_spaces = self.n_letters[0]-1
 		space_locs_idx = np.argpartition(-max_xaxis[space_locs], -expected_spaces)[-expected_spaces:]
 
 		space_locs = space_locs[space_locs_idx]
