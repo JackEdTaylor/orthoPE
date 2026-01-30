@@ -135,7 +135,7 @@ class OrthopeEstimator():
 		if not os.path.exists(self.savepath): os.makedirs(self.savepath)
 		if not os.path.exists(self.datapath): os.makedirs(self.datapath)
 
-	def __create_opes_df__(self, words, estimates=None, save=True):
+	def __create_opes_df__(self, words, estimates=None, save=True, do_return=True):
 
 		if estimates is None: 
 			estimates = ['n_pixels_l1', 'n_pixels_l2', 
@@ -192,7 +192,10 @@ class OrthopeEstimator():
 		if save:
 			opes_df.to_csv(self.opespath)
 
-		return opes_df
+		if do_return:
+			return opes_df
+		else:
+			return None
 	
 	def __get_corpus__(self):
 		# Available corpora:
@@ -760,7 +763,7 @@ class OrthopeEstimator():
 
 		return(x_crop, pad_width)
 
-	def load_opes(self, input_words=None, save=True, load_existing=True):
+	def load_opes(self, input_words=None, save=True, do_return=True, load_existing=True):
 
 		if input_words is None:
 			input_words = self.input_words
@@ -778,9 +781,10 @@ class OrthopeEstimator():
 			if self.verbose:
 				print(f'Calculating oPE for {len(input_words)} inputs...')
 			self.estimate_corpus_stats(weight_by_freq=self.freq_weight)
-			opes_df = self.__create_opes_df__(words=input_words, save=save)
+			opes_df = self.__create_opes_df__(words=input_words, save=save, do_return=do_return)
 
-		return opes_df
+		if do_return:
+			return opes_df
 
 
 class LetterOrthopeEstimator(OrthopeEstimator):
@@ -920,7 +924,7 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 
 		return dd, word_weights, lett_weights
 
-	def __create_opes_df__(self, words, estimates=None, save=True):
+	def __create_opes_df__(self, words, estimates=None, save=True, do_return=None):
 
 		if estimates is None: 
 			estimates = ['pred_err_l1', 'pred_err_l2', 
@@ -963,7 +967,10 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		if save:
 			opes_df.to_csv(self.opespath)
 
-		return opes_df
+		if do_return:
+			return opes_df
+		else:
+			return None
 	
 	def estimate_corpus_stats(self, weight_by_freq=None):
 		if weight_by_freq is None:
@@ -1059,18 +1066,18 @@ class WithinLetterOptimalTransportOrthopeEstimator(OrthopeEstimator):
 		return ope
 
 
-def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_jobs=1, save_at_each=True, joblib_backend='loky', reverse_estimator_list=False):
+def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_jobs=1, save_at_each=True, joblib_backend='loky', reverse_estimator_list=False, subset=None):
 	
 	if n_jobs != 1:
 		# function that will be called in parallel
 		def do_load_opes(gg_i):
-			df = gg_i.load_opes(save=save_at_each, load_existing=save_at_each)
+			df = gg_i.load_opes(save=save_at_each, do_return=(not save_at_each), load_existing=save_at_each)
 			if save_at_each:
 				return None
 			else:
 				return df, gg_i.opespath
 		
-		tqdm_desc = f'{data_label} {language}, letters {n_letters}'
+		tqdm_desc = f'{data_label} {language}, letters ({str(n_letters[0])}, {str(n_letters[1])})'
 
 		# Letter identity approach
 		ggs_li = [
@@ -1100,6 +1107,11 @@ def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_job
 
 		# create the estimators list
 		estimators = [*ggs_li, *ggs_ot, *ggs_euc]
+
+		# get the requested subset
+		if subset is not None:
+			print(f'Subsetting to {subset[0]}:{subset[1]} of {len(estimators)} estimators')
+			estimators = estimators[subset[0]:subset[1]]
 
 		# reverse model list if requested
 		if reverse_estimator_list:
