@@ -425,7 +425,13 @@ class OrthopeEstimator():
 		else:
 			e = x - self.corpus_stats['mu']
 			if bin_threshold is not None:
-				e = (e > bin_threshold).astype(e.dtype)
+				if estimate in ['mahalanobis', 'kalmanw_pred_err']:
+					# remove values within the threshold with either sign;
+					# this way we keep the sign and intensity of the original values
+					e[abs(e) <= bin_threshold] = 0.0
+				else:
+					# binarise
+					e = (abs(e) > bin_threshold).astype(e.dtype)
 
 		match estimate:
 			case 'n_pixels_l1':
