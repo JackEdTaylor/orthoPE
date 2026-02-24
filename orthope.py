@@ -148,7 +148,8 @@ class OrthopeEstimator():
 		bin_pred_estimates = ['pred_err_l1', 'pred_err_l2', 'pw_pred_err',
 							  'mahalanobis', 'kalmanw_pred_err']
 		
-		bin_thresholds = [None, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  # binary thresholds to test
+		# thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  # thresholds to test (None is also tested for each measure)
+		thresholds = [0.5]  # thresholds to test (None is also tested)
 		
 		n_obs   = 100 if self.gauss_noise_sd > 0 else 1
 		opes_data = {word: {} for word in words}
@@ -175,17 +176,20 @@ class OrthopeEstimator():
 					x_renders = [word_renders[word] + self.gauss_noise_sd * self.rng.randn(*word_renders[word].shape) for _ in range(n_obs)]
 				else:
 					x_renders = [word_renders[word]]
+
+				# estimates without thresholds
+				opes = [self.__estimate_ope_from_render__(x, est, threshold=None) for x in x_renders]
+				opes_data[word][est+'_mu']  = np.mean(opes)
+				opes_data[word][est+'_std'] = np.std(opes)
 				
+				# estimates with thresholds
 				if est in bin_pred_estimates:
-					for thr in bin_thresholds:
-						opes = [self.__estimate_ope_from_render__(x, est, bin_threshold=thr) for x in x_renders]
-						est_lab = est if thr is None else est+'_thr_'+str(thr)
-						opes_data[word][est_lab+'_mu']  = np.mean(opes)
-						opes_data[word][est_lab+'_std'] = np.std(opes)
-				else:
-					opes = [self.__estimate_ope_from_render__(x, est) for x in x_renders]
-					opes_data[word][est+'_mu']  = np.mean(opes)
-					opes_data[word][est+'_std'] = np.std(opes)
+					for thr in thresholds:
+						for bn in [True, False]:
+							opes = [self.__estimate_ope_from_render__(x, est, threshold=thr, binarise_threshold=bn) for x in x_renders]
+							est_lab = est + '_thr' + str(thr) + '_bin' + str(bn)
+							opes_data[word][est_lab+'_mu']  = np.mean(opes)
+							opes_data[word][est_lab+'_std'] = np.std(opes)
 
 		opes_df = pd.DataFrame.from_dict(opes_data, orient='index')
 
@@ -409,29 +413,29 @@ class OrthopeEstimator():
 			case 'kal':
 				self.__plot_4dstat__(stat)
 
-	def __estimate_ope__(self, word, estimate, bin_threshold=None):
+	def __estimate_ope__(self, word, estimate, threshold=None, binarise_threshold=False):
 
 		x = self.__render_text__(word, gauss_noise_sd=self.gauss_noise_sd)
 		# x_no_noise = self.__render_text__(word, gauss_noise_sd=0.0)
 
-		return self.__estimate_ope_from_render__(x, estimate, bin_threshold=bin_threshold)
+		return self.__estimate_ope_from_render__(x, estimate, threshold=threshold, binarise_threshold=binarise_threshold)
 	
-	def __estimate_ope_from_render__(self, x, estimate, bin_threshold=None):
+	def __estimate_ope_from_render__(self, x, estimate, threshold=None, binarise_threshold=False):
 		"""Compute OPE from pre-rendered text array (avoids re-rendering)."""
 
 		if 'n_pixels_' in estimate or '_wd' in estimate or '_gwd' in estimate:
-			if bin_threshold is not None:
-				raise ValueError(f'Don\'t know how to apply binary prediction threshold to {estimate}')
+			if threshold is not None:
+				raise ValueError(f'Don\'t know how to apply prediction threshold to {estimate}')
 		else:
 			e = x - self.corpus_stats['mu']
-			if bin_threshold is not None:
-				if estimate in ['mahalanobis', 'kalmanw_pred_err']:
+			if threshold is not None:
+				if binarise_threshold:
+					# binarise
+					e = (abs(e) > threshold).astype(e.dtype)
+				else:
 					# remove values within the threshold with either sign;
 					# this way we keep the sign and intensity of the original values
-					e[abs(e) <= bin_threshold] = 0.0
-				else:
-					# binarise
-					e = (abs(e) > bin_threshold).astype(e.dtype)
+					e[abs(e) <= threshold] = 0.0
 
 		match estimate:
 			case 'n_pixels_l1':
@@ -439,7 +443,6 @@ class OrthopeEstimator():
 			case 'n_pixels_l2':
 				ope = np.linalg.norm(x)
 			case 'pred_err_l1':
-				# ope = e.sum()
 				ope = abs(e).sum()
 			case 'pred_err_l2':
 				ope = np.linalg.norm(e)
