@@ -187,7 +187,7 @@ class OrthopeEstimator():
 					for thr in thresholds:
 						for bn in [True, False]:
 							opes = [self.__estimate_ope_from_render__(x, est, threshold=thr, binarise_threshold=bn) for x in x_renders]
-							est_lab = est + '_thr' + str(thr) + '_bin' + str(bn)
+							est_lab = est + '_thr-' + str(thr) + '_bin-' + str(bn)
 							opes_data[word][est_lab+'_mu']  = np.mean(opes)
 							opes_data[word][est_lab+'_std'] = np.std(opes)
 
