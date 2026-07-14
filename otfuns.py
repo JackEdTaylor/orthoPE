@@ -77,11 +77,8 @@ def get_gw(s, t, metric='Euclidean', scale_distance=True):
     s_hist /= s_hist.sum()
     t_hist /= t_hist.sum()
 
-    # amount of mass to transport
-    m = min([s_hist.sum(), t_hist.sum()])
-
     # get cost
-    cost = ot.gromov.partial_gromov_wasserstein2(C1, C2, p=s_hist, q=t_hist, m=m, loss_fun='square_loss', symmetric=None, armijo=False, G0=None, numItermax=1e12, tol=1e-09)
+    cost = ot.gromov.gromov_wasserstein2(C1, C2, p=s_hist, q=t_hist, loss_fun='square_loss', symmetric=None, armijo=False, G0=None, max_iter=1e12, tol=1e-09)
 
     return cost
 
@@ -103,11 +100,8 @@ def get_w(s, t, metric='Euclidean', scale_distance=False):
     s_hist /= s_hist.sum()
     t_hist /= t_hist.sum()
 
-    # amount of mass to transport
-    m = min([s_hist.sum(), t_hist.sum()])
-
     # get cost
-    cost = ot.partial.partial_wasserstein2(a=s_hist, b=t_hist, M=M, m=m, nb_dummies=1)
+    cost = ot.emd2(a=s_hist, b=t_hist, M=M)
 
     return cost
 
