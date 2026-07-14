@@ -1124,7 +1124,7 @@ def run_all_oPEs(language, input_words, n_letters=(5, 5), data_label=None, n_job
 
 		# reverse model list if requested
 		if reverse_estimator_list:
-			list(reversed(estimators))
+			estimators = list(reversed(estimators))
 	
 		# Estimate all in parallel
 		out = Parallel(n_jobs=n_jobs, backend=joblib_backend, timeout=8**8)(delayed(do_load_opes)(gg_i) for gg_i in tqdm(estimators, desc=tqdm_desc))
